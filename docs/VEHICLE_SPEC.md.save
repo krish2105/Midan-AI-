@@ -1,0 +1,32 @@
+Ship this as UVehicleFeelDataAsset + a set of C components. Every value is a curve, not a constant.
+
+2.1 Camera — UMidanChaseCameraComponent
+Behaviour	Implementation
+Speed FOV	FOV = BaseFOV + FOVCurve.Eval(speed01). Typically 75° → 100°. The single biggest speed-sensation lever.
+Positional lag	Spring-arm lag with separate location/rotation speeds, curve-driven by speed
+Look-ahead	Yaw offset from steering input, damped — the camera anticipates the corner
+Slip yaw	Additional yaw from chassis slip angle so drifts read clearly
+Vertical damping	Suppress suspension chatter reaching the camera; keep big impacts
+Impact shake	Camera shake scaled by impact impulse magnitude, curve-mapped
+Surface rumble	Low-amplitude noise driven by surface roughness per wheel
+
+Provide four camera modes (chase far, chase near, bonnet, cockpit) behind one interface.
+
+2.2 Audio — MetaSounds, no external dependency
+
+- Engine: minimum 4 RPM sample layers (idle, low, mid, high) crossfaded on RPM, with separate on-load and off-load sets crossfaded by throttle. Two-axis blending is what separates convincing engine audio from a whine.
+- Transmission: shift-up punch, shift-down blip, driven by gear-change events.
+- Tyres: slip-driven scrub, surface-dependent, per-axle so oversteer sounds different from understeer.
+- Wind: speed-driven noise layer.
+- Impacts: impulse-magnitude-mapped.
+- Doppler + attenuation on AI vehicles; ensure the player's own vehicle bypasses Doppler.
+
+Wire a UVehicleAudioComponent that reads physics state each frame and pushes parameters into the MetaSound. Keep the sound design in the MetaSound graph (human-authored); keep the parameter mapping in C.
+
+2.3 Visual feedback
+Speed-scaled motion blur intensity · subtle chromatic aberration above a speed threshold · radial vignette curve · tyre smoke particle rate driven by slip · surface-dependent particle spawning (dust, gravel, water spray) · skid decal deposition gated by slip threshold with a pooled decal budget · exhaust backfire on overrun.
+
+2.4 Haptics
+Force feedback curves for: engine idle rumble, surface roughness, wheel slip, impacts, kerb strikes. UForceFeedbackEffect assets referenced from the Feel Data Asset.
+⸻
+
