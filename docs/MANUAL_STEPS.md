@@ -56,15 +56,28 @@ Record what you find in `docs/PERFORMANCE_BUDGET.md` §6.4. If any path is mater
 weaker, **take the cheaper option from the start** — discovering it after six weeks of
 tuning is the expensive version of this conversation.
 
-### 0.4 Choose three fictional vehicle names — blocks Phase 2 data authoring
+### 0.4 Trademark-search the three vehicle names — before any shipped build
 
-`docs/VEHICLE_SPEC.md` has `[Name]` placeholders for all three cars. Names must not be
-traceable to a real manufacturer or model. This is a **legal boundary**, not a stylistic
-preference — see `docs/ART_DIRECTION.md` §0.
+**Names are chosen** — **Sahm**, **Raqs**, **Hajar** — and `docs/VEHICLE_SPEC.md` §Naming
+records the scheme and rationale. No longer blocks Phase 2.
 
-Candidates will be proposed at the Phase 2 gate for you to approve or replace. The
-constraint is only that the final three are original and that no badge, grille shape, or
-light signature in the eventual art is traceable to a marque.
+**What still needs you:** run each name through a **trademark register for automotive
+classes**. They were checked against manufacturers and models known to Claude and no
+collision was found, but that is not clearance — Claude cannot search a register.
+
+| Name | Checked against | Result |
+|---|---|---|
+| Sahm | Car marques and models | No automotive use found. A German glassware company exists; not automotive. |
+| Raqs | Car marques and models | No automotive use found. |
+| Hajar | Car marques and models | No automotive use found. A mountain range and a personal name. |
+
+Deliberately avoided: **wind names.** That space is heavily occupied — Maserati has used
+Khamsin, Shamal, Bora and Merak, Volkswagen has Scirocco, and Jeep has a Sahara trim. It is
+the fastest route to an accidental collision for exactly the kind of car this project builds.
+
+A five-minute check, and it is the difference between an original name and an expensive one.
+If you also want a fictional **marque** name, it needs the same check and carries more risk,
+because manufacturer marks are defended far more aggressively than model names.
 
 ### 0.5 Already verified — no action needed
 

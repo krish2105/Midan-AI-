@@ -361,12 +361,22 @@ Chaos wheel setups are built one-per-wheel at apply time. Supporting a different
 rewrite of all three, not a value change — and all three vehicles in
 `docs/VEHICLE_SPEC.md` have four wheels.
 
-### A16 — Vehicle names are placeholders · needed by Phase 2
+### A16 — Vehicle names chosen · RESOLVED, one check outstanding
 
-`docs/VEHICLE_SPEC.md` reads `## 1. [Name] — Hypercar` for all three cars. Three original
-names are required, and this is a legal boundary rather than a naming preference.
+`docs/VEHICLE_SPEC.md` previously read `## 1. [Name] — Hypercar` for all three cars.
 
-Candidates will be proposed at the Phase 2 gate. You approve or replace them.
+**Resolved:** names delegated to me and chosen — **Sahm** (arrow, hypercar), **Raqs** (dance,
+GT), **Hajar** (stone, rally). Arabic, matching the project name, each describing the car's
+behaviour rather than decorating it. Rationale and the rejected wind-name space are recorded
+in `docs/VEHICLE_SPEC.md` §Naming.
+
+**Still open, and it is not something I can close:** no trademark search has been run. I
+checked against manufacturers and models I know of and found no collision, which is not the
+same thing as clearance. Before these names reach a shipped build or a portfolio page, run
+each through a trademark register for automotive classes.
+
+This keeps the legal boundary honest: the names are original as far as knowledge goes, and
+unverified as far as registers go. Those are different claims and the docs state both.
 
 ### A17 — Canyon road vs closed 3 km loop · needed by Phase 5
 
