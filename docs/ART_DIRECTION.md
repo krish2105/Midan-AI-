@@ -1,6 +1,9 @@
 # MIDAN — ART DIRECTION & RENDERING SPECIFICATION
 **Attach alongside `MIDAN_UE5_RACING_CLAUDE_CODE_MASTER_PROMPT.md`**
-Version 2.0 · Target: 1080p / 60fps primary, 1440p stretch
+Version 2.1 · Target: 1080p / 60fps primary, 1440p stretch
+
+> **v2.1** — §8.1 gains an assist/off-track flag row, specified in §8.5. Approved after
+> Phase 3 surfaced the states. No other section changed from v2.0.
 
 > **v2.0 — art direction pivot.** v1.0 specified a golden-hour desert canyon with a single
 > locked lighting condition. v2.0 replaces it with a **wet neon city circuit at night**,
@@ -445,6 +448,35 @@ The reference layout is good. Build exactly this, with two corrections.
 | Position / Lap | Top-right | 10Hz arc-length position calc; lap from `UMidanLapTimingSubsystem` |
 | Sector delta | Top-right, below position | Live delta vs personal best sector. Green negative, red positive. |
 | Minimap | Bottom-right | Generated from the track spline, not an authored texture |
+| **Assist / off-track flags** | **Top-left** | **TC, ABS, OFF TRACK. From `UVehicleAssistComponent::GetActiveInterventions()` and `UVehicleSurfaceSensorComponent::GetOffTrackWheelCount()`. Approved v2.1 — see §8.5.** |
+
+### 8.5 Assist and off-track flags — approved v2.1
+
+Added after Phase 3, which surfaced all three states. Not in the original reference frame,
+and it is the one HUD element this project has that the reference did not.
+
+| Flag | Lit when | Why the player needs it |
+|---|---|---|
+| **TC** | `EMidanAssistFlags::TractionControl` is intervening | Traction control cutting throttle feels identical to the engine going flat. Without an indicator the player attributes an assist to a broken car. |
+| **ABS** | `EMidanAssistFlags::ABS` is intervening | Brake release under lock reads as brake failure. Same reasoning. |
+| **OFF TRACK** | `GetOffTrackWheelCount() > 0` | Lap invalidation has a grace period (§3.2). Without a live indicator the player learns their lap was voided several seconds after the cause, which reads as arbitrary. |
+
+Rules that follow:
+
+- **Momentary, not sticky.** These reflect live state. A latched indicator would tell the
+  player that TC fired at some point, which is not actionable.
+- **Amber for TC and ABS, red for OFF TRACK.** Off-track has a rules consequence; the
+  assists do not.
+- **Text label, not an icon.** Three-letter labels are unambiguous at speed; invented
+  iconography needs learning, and this slice gives the player 90 seconds.
+- **Fades with the minimal-HUD toggle** (§8.4) — informative, not critical.
+- **Colour is not the only channel.** OFF TRACK is distinguished from the assists by its
+  label and its position in the row, so the §8.4 colourblind rule holds without a fourth
+  visual language.
+
+Stability control and steering assist deliberately get **no flag**. Both are off by default
+on the GT, both intervene continuously rather than in discrete events, and an indicator that
+is lit most of the time is wallpaper.
 
 ### 8.2 Two corrections to the reference
 1. **Move the RPM strip adjacent to the gear readout**, not floating across the frame. Shift point and gear are read together; separating them costs the player a saccade at exactly the wrong moment.

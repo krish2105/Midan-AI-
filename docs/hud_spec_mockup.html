@@ -469,12 +469,22 @@ body[data-notes="1"] .notes{display:block}
     <li><code>prefers-reduced-motion</code> stops rain, lane rush and sign flicker.</li>
   </ul>
 
-  <h3>Proposed §8 amendment</h3>
-  <p>The TC / ABS / OFF-TRACK flags top-left are <strong>not in §8's table.</strong>
-  Phase 3 surfaces all three (<code>UVehicleAssistComponent::GetActiveInterventions</code>,
-  <code>UVehicleSurfaceSensorComponent::GetOffTrackWheelCount</code>) and a driver needs
-  to know when an assist intervened. Flagged as a proposed amendment rather than
-  assumed — approve it and §8.1 gains a row.</p>
+  <h3>Assist flags — APPROVED, §8.5 (v2.1)</h3>
+  <p>The TC / ABS / OFF-TRACK flags top-left are now specified in
+  <code>ART_DIRECTION.md §8.5</code> and carry a row in §8.1. Bindings:
+  <code>UVehicleAssistComponent::GetActiveInterventions</code> and
+  <code>UVehicleSurfaceSensorComponent::GetOffTrackWheelCount</code>.</p>
+  <ul>
+    <li><strong>Momentary, not latched</strong> — live state only. A sticky indicator says
+    TC fired at some point, which is not actionable.</li>
+    <li><strong>Amber for TC/ABS, red for OFF TRACK</strong> — off-track has a rules
+    consequence; the assists do not.</li>
+    <li><strong>Text, not icons</strong> — three letters are unambiguous at speed and need
+    no learning in a 90-second slice.</li>
+    <li>Stability control and steering assist get <strong>no flag</strong>: both intervene
+    continuously rather than discretely, and an indicator lit most of the time is
+    wallpaper.</li>
+  </ul>
 
   <h3>UMG binding map for Phase 7</h3>
   <ul>
@@ -675,7 +685,7 @@ const ANNOTATIONS = [
   {sel:".pos",        tag:"Position / Lap · 10 Hz calc (§8.1)", side:"left"},
   {sel:"#deltaPanel", tag:"Sector delta · sign+arrow, not colour alone (§8.4)", side:"left"},
   {sel:".map",        tag:"Minimap · spline-sampled (§8.2 correction 2)", side:"left"},
-  {sel:".flags",      tag:"Assist flags · PROPOSED §8 amendment", side:"bottom"},
+  {sel:".flags",      tag:"Assist / off-track flags (§8.5, approved v2.1)", side:"bottom"},
 ];
 function drawAnnotations(){
   const layer = $("#annoLayer"); layer.innerHTML = "";

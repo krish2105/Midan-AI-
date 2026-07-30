@@ -15,7 +15,7 @@ and are recorded below.
 |---|---|---|---|---|---|---|
 | Hypercar concept reference | `docs/concept/concept_hyper.png` | Generated (Higgsfield, nano-banana-pro) | Original generated work — no third-party rights asserted | Generated to a Midan-authored prompt | 2026-07-30 | No |
 | GT concept reference | `docs/concept/concept_gt.png` | Generated (Higgsfield, nano-banana-pro) | Original generated work — no third-party rights asserted | Generated to a Midan-authored prompt | 2026-07-30 | No |
-| Rally concept reference | *not yet generated* | — | — | — | — | Blocked: image-generation credits exhausted |
+| Rally concept reference | `docs/concept/concept_rally.png` | Generated (Higgsfield, z-image) | Original generated work — no third-party rights asserted | Generated to a Midan-authored prompt | 2026-07-30 | No — **see defect note** |
 
 ### Notes on the generated concepts
 
@@ -29,10 +29,29 @@ explicitly permits. Each silhouette reads as a generic archetype — mid-engine 
 front-engine long-bonnet GT — rather than a specific model.
 
 **But §0's actual test is "if a car enthusiast can name it, redesign it", and that test needs
-an enthusiast.** This review was done by Claude, which is not one. Before either design is
-committed to in Blender, have someone who follows cars closely confirm neither reads as a
+an enthusiast.** This review was done by Claude, which is not one. Before any design is
+committed to in Blender, have someone who follows cars closely confirm none reads as a
 specific model. The GT's long-bonnet/short-deck proportions in particular sit close to a
 recognisable family archetype, and archetype is fine while a traceable silhouette is not.
+
+#### Known defect — rally reference
+
+The rear panel was inspected at full resolution and is **clean of badges and wordmarks**.
+However, there is **illegible artefact lettering inside the right-hand tail lamp lens** — a
+generation artefact, not a real brand mark, but §0 permits no lettering on the vehicle at all.
+
+Consequence: **do not reproduce that lamp detail when modelling.** The lens should be a plain
+emissive element. Recorded here rather than silently ignored because a reference image is
+exactly how an unintended mark makes it into a model.
+
+The three references also differ in generator and resolution, which matters for judging them
+as a set rather than individually:
+
+| Car | Model | Resolution | Note |
+|---|---|---|---|
+| Hypercar | nano-banana-pro | 1376×768 | — |
+| GT | nano-banana-pro | 1376×768 | — |
+| Rally | z-image | 2048×1152 | Different generator — image-generation credits ran short of nano-banana-pro's 2-credit cost, and z-image at 0.15 credits was the accessible option. Its output is higher resolution but from a different model, so the three are not a stylistically matched set. Regenerate all three on one model if a matched roster sheet is wanted. |
 
 ---
 
