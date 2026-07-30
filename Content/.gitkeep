@@ -1,0 +1,3 @@
+Editor-authored content lives here. Every binary asset must have a Git LFS rule
+in .gitattributes before it is committed, and every third-party asset must have
+a row in docs/ASSET_LICENCES.md on the same commit that adds it.
