@@ -82,6 +82,35 @@ struct MIDANVEHICLE_API FMidanCameraModeConfig
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Behaviour")
 	bool bUseCollisionTest = true;
+
+	/**
+	 * How fast look-ahead yaw converges on its target, 1/seconds.
+	 *
+	 * Added at Phase 4. Higher makes the camera lead the steering more eagerly;
+	 * too high and it snaps, which reads as the camera twitching rather than
+	 * anticipating. This is a feel value a human tunes, so it is here rather
+	 * than a constant in the camera code.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lag", meta = (ClampMin = "0.5", UIMax = "20.0"))
+	float LookAheadDampingRate = 5.f;
+
+	/**
+	 * How fast slip yaw converges, 1/seconds.
+	 *
+	 * Deliberately faster than look-ahead by default: a slide begins abruptly
+	 * and the camera must keep up or the drift is over before it reads.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Lag", meta = (ClampMin = "0.5", UIMax = "20.0"))
+	float SlipYawDampingRate = 7.f;
+
+	/** Vertical damping rate when VerticalDamping is 0, 1/seconds. Together with
+	 *  the min, defines what the 0..1 dial means. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Behaviour", meta = (ClampMin = "1.0", UIMax = "200.0"))
+	float VerticalDampingRateMax = 60.f;
+
+	/** Vertical damping rate when VerticalDamping is 1, 1/seconds. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Behaviour", meta = (ClampMin = "0.5", UIMax = "60.0"))
+	float VerticalDampingRateMin = 4.f;
 };
 
 UCLASS(BlueprintType)
@@ -118,6 +147,31 @@ public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Shake")
 	FRuntimeFloatCurve SurfaceRumbleByRoughness;
 
+	/**
+	 * How fast impact shake decays, 1/seconds. Added at Phase 4.
+	 *
+	 * Fast enough that a shake reads as an impact rather than a wobble. Too slow
+	 * and every kerb strike leaves the camera swimming for a second afterwards.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Shake", meta = (ClampMin = "0.5", UIMax = "30.0"))
+	float ShakeDecayRate = 6.f;
+
+	/** How fast surface rumble fades in and out when crossing a surface
+	 *  boundary, 1/seconds. Damped so entering gravel fades rather than jolts. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Shake", meta = (ClampMin = "0.5", UIMax = "30.0"))
+	float RumbleFadeRate = 8.f;
+
+	/**
+	 * Impulse treated as a full-scale impact, Newton-seconds.
+	 *
+	 * The denominator that normalises a collision before it reaches
+	 * ImpactShakeByImpulse and HapticAmplitudeByImpulse. Shared by the camera,
+	 * audio and haptic channels so all three agree what "big" means — three
+	 * channels disagreeing about the same collision is worse than one missing.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|Shake", meta = (ClampMin = "100.0", UIMax = "50000.0"))
+	float FullScaleImpactImpulse = 5000.f;
+
 	// --- Audio ---------------------------------------------------------------
 
 	/**
@@ -150,6 +204,37 @@ public:
 	 *  oversteer sounds different from understeer. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio")
 	FRuntimeFloatCurve TyreScrubGainBySlip;
+
+	//~ Audio feel values, added at Phase 4. Each affects how the engine SOUNDS
+	//  under a given physical state, which is exactly the kind of thing a human
+	//  tunes by ear — so none of them is a constant in the audio code.
+
+	/**
+	 * How fast engine load converges, 1/seconds.
+	 *
+	 * Load is the second blend axis. Raw load is noisy at the substep level, and
+	 * an unsmoothed crossfade between the on-load and off-load sample sets
+	 * sounds like a fault rather than a transition. Too slow and the engine
+	 * responds audibly late to the throttle.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio|Engine", meta = (ClampMin = "1.0", UIMax = "40.0"))
+	float EngineLoadSmoothingRate = 9.f;
+
+	/**
+	 * How much closed-throttle overrun counts as load, 0..1.
+	 *
+	 * A closed throttle at high RPM is working against the drivetrain, and that
+	 * is an audible state rather than silence. Raise it for a car with strong
+	 * engine braking; zero makes lifting off go quiet.
+	 */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio|Engine", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float OverrunLoadWeight = 0.35f;
+
+	/** Engine load above which an upshift triggers a backfire, 0..1. An upshift
+	 *  while coasting does not backfire on a real car and sounds gratuitous on a
+	 *  fake one. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Audio|Engine", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float BackfireLoadThreshold = 0.6f;
 
 	// --- Visual FX -----------------------------------------------------------
 
@@ -217,6 +302,23 @@ public:
 	 *  ImpactShakeByImpulse so visual, audio and haptic channels agree. */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Haptics")
 	FRuntimeFloatCurve HapticAmplitudeByImpulse;
+
+	/** Transient intensity for a kerb strike, 0..1. Added at Phase 4. A kerb is
+	 *  a deliberate part of driving, so it should feel like texture rather than
+	 *  damage — noticeably below a collision. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Haptics", meta = (ClampMin = "0.0", ClampMax = "1.0"))
+	float KerbStrikeIntensity = 0.6f;
+
+	/** How fast continuous haptic amplitudes converge, 1/seconds. Raw values
+	 *  chatter, and a chattering rumble reads as a faulty controller rather
+	 *  than a rough surface. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Haptics", meta = (ClampMin = "1.0", UIMax = "40.0"))
+	float HapticSmoothingRate = 10.f;
+
+	/** Speed above which engine idle rumble has fully faded out, km/h. At
+	 *  250km/h the idle is not what the controller should be communicating. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Haptics", meta = (ClampMin = "5.0", UIMax = "200.0"))
+	float IdleRumbleFadeOutSpeedKmh = 60.f;
 
 	//~ Begin UMidanDataAsset interface
 	virtual void ValidateMidanData(FMidanValidationResult& Result) const override;

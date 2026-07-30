@@ -31,7 +31,13 @@ public class MidanVehicle : ModuleRules
 			// pushes the driving mapping context. Private because no public
 			// header exposes an Enhanced Input type — the input config asset
 			// holds only TSoftObjectPtr, which needs a forward declaration.
-			"EnhancedInput"
+			"EnhancedInput",
+
+			// Phase 4 — the feel layer. All private for the same reason: the
+			// feel asset holds only soft pointers, so no public header names a
+			// Niagara or audio type.
+			"Niagara",        // UVehicleFXComponent tyre smoke and backfire
+			"AudioMixer"      // UVehicleAudioComponent MetaSound parameter push
 		});
 	}
 }

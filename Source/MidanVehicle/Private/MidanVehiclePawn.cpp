@@ -7,10 +7,15 @@
 #include "MidanDeveloperSettings.h"
 #include "MidanInputConfigDataAsset.h"
 #include "MidanLogChannels.h"
+#include "MidanChaseCameraComponent.h"
 #include "MidanVehicleMovementComponent.h"
 #include "SurfaceResponseDataAsset.h"
 #include "VehicleAeroComponent.h"
 #include "VehicleAssistComponent.h"
+#include "VehicleAudioComponent.h"
+#include "VehicleFXComponent.h"
+#include "VehicleFeelDataAsset.h"
+#include "VehicleHapticsComponent.h"
 #include "VehicleInputComponent.h"
 #include "VehicleSetupApplier.h"
 #include "VehicleSetupDataAsset.h"
@@ -34,6 +39,17 @@ AMidanVehiclePawn::AMidanVehiclePawn()
 	SurfaceSensor = CreateDefaultSubobject<UVehicleSurfaceSensorComponent>(TEXT("SurfaceSensorComponent"));
 	Assists = CreateDefaultSubobject<UVehicleAssistComponent>(TEXT("AssistComponent"));
 	MidanInput = CreateDefaultSubobject<UVehicleInputComponent>(TEXT("MidanInputComponent"));
+
+	// Phase 4 feel layer. The camera attaches to the root rather than to the
+	// mesh: attaching to a skeletal mesh would inherit per-bone animation, and
+	// suspension bone motion reaching the camera is exactly the chatter
+	// FMidanCameraModeConfig::VerticalDamping exists to filter.
+	ChaseCamera = CreateDefaultSubobject<UMidanChaseCameraComponent>(TEXT("ChaseCamera"));
+	ChaseCamera->SetupAttachment(RootComponent);
+
+	VehicleAudio = CreateDefaultSubobject<UVehicleAudioComponent>(TEXT("VehicleAudio"));
+	VehicleFX = CreateDefaultSubobject<UVehicleFXComponent>(TEXT("VehicleFX"));
+	Haptics = CreateDefaultSubobject<UVehicleHapticsComponent>(TEXT("Haptics"));
 
 	// NO asset resolution here. CLAUDE.md forbids FindObject, LoadObject and hard
 	// references in constructors — a constructor runs during CDO creation, so a
@@ -77,6 +93,11 @@ void AMidanVehiclePawn::EndPlay(const EEndPlayReason::Type EndPlayReason)
 	{
 		SetupLoadHandle->CancelHandle();
 		SetupLoadHandle.Reset();
+	}
+	if (FeelLoadHandle.IsValid())
+	{
+		FeelLoadHandle->CancelHandle();
+		FeelLoadHandle.Reset();
 	}
 
 	Super::EndPlay(EndPlayReason);
@@ -125,6 +146,9 @@ void AMidanVehiclePawn::RequestSetupLoad()
 		ToLoad.Add(InputConfig.ToSoftObjectPath());
 	}
 
+	// The feel asset is NOT requested here: it is referenced by the setup asset,
+	// so its path is unknown until that has loaded. RequestFeelLoad handles it.
+
 	// Store the resolved soft pointers so OnSetupLoaded reads the same ones the
 	// load was issued for, rather than re-resolving and possibly picking up a
 	// different fallback.
@@ -150,6 +174,37 @@ void AMidanVehiclePawn::OnSetupLoaded()
 		return;
 	}
 
+	// The feel asset lives behind a soft pointer INSIDE the setup asset, so its
+	// path only becomes knowable now. Chain a second request rather than
+	// applying with a null feel asset.
+	RequestFeelLoad();
+}
+
+void AMidanVehiclePawn::RequestFeelLoad()
+{
+	if (!LoadedSetup || LoadedSetup->Feel.IsNull())
+	{
+		// No feel asset authored. Apply the physics anyway — the car drives, it
+		// just has no camera behaviour or audio. ApplyLoadedSetup logs that.
+		ApplyLoadedSetup();
+		return;
+	}
+
+	if (LoadedSetup->Feel.Get())
+	{
+		// Already resident, typically because another vehicle of the same class
+		// loaded it first. Skip the round trip.
+		OnFeelLoaded();
+		return;
+	}
+
+	FeelLoadHandle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
+		LoadedSetup->Feel.ToSoftObjectPath(),
+		FStreamableDelegate::CreateUObject(this, &AMidanVehiclePawn::OnFeelLoaded));
+}
+
+void AMidanVehiclePawn::OnFeelLoaded()
+{
 	ApplyLoadedSetup();
 }
 
@@ -217,6 +272,41 @@ void AMidanVehiclePawn::ApplyLoadedSetup()
 		Assists->InitialiseFromConfig(LoadedSetup->Assists, MidanMovement);
 	}
 
+	// --- Phase 4 feel layer. Initialised after the physics components so the
+	// camera and audio read a configured car rather than engine defaults.
+	LoadedFeel = LoadedSetup->Feel.Get();
+
+	if (!LoadedFeel)
+	{
+		// Not fatal — the car drives. But it drives with a fixed-FOV unlagged
+		// camera and no sound, which will read as "the game feels bad" rather
+		// than "an asset is missing", so it is logged loudly.
+		UE_LOG(LogMidanVehicle, Warning,
+			TEXT("MidanVehiclePawn '%s': setup '%s' has no loaded Feel asset. Camera, audio, FX and "
+				 "haptics will all be inert. The car will drive correctly and feel wrong."),
+			*GetName(), *GetNameSafe(LoadedSetup));
+	}
+	else
+	{
+		if (ChaseCamera)
+		{
+			ChaseCamera->InitialiseFromAsset(LoadedFeel, MidanMovement, SurfaceSensor);
+		}
+		if (VehicleAudio)
+		{
+			VehicleAudio->InitialiseFromAsset(
+				LoadedFeel, MidanMovement, SurfaceSensor, LoadedSetup->Powertrain.MaxRPM);
+		}
+		if (VehicleFX)
+		{
+			VehicleFX->InitialiseFromAsset(LoadedFeel, MidanMovement, SurfaceSensor);
+		}
+		if (Haptics)
+		{
+			Haptics->InitialiseFromAsset(LoadedFeel, MidanMovement, SurfaceSensor);
+		}
+	}
+
 	bSetupApplied = true;
 
 	// Unlock only once everything is configured. The race game mode re-locks for
@@ -278,6 +368,14 @@ void AMidanVehiclePawn::Tick(const float DeltaSeconds)
 		const FMidanVehicleInputState& Shaped =
 			MidanInput->ShapeInput(LoadedSetup->Steering, GetForwardSpeedKmh(), DeltaSeconds);
 		ApplyInput(Shaped);
+
+		// Look-ahead needs the driver's steering. Pushed rather than pulled: a
+		// camera that could reach into the input component could also change
+		// what it observes.
+		if (ChaseCamera)
+		{
+			ChaseCamera->SetSteerInput(Shaped.Steer);
+		}
 	}
 }
 
@@ -376,4 +474,36 @@ void AMidanVehiclePawn::CaptureTelemetryState(FMidanVehicleFrameState& OutState)
 void AMidanVehiclePawn::CaptureTelemetryInput(FMidanVehicleInputState& OutInput) const
 {
 	OutInput = LastAppliedInput;
+}
+
+void AMidanVehiclePawn::NotifyHit(
+	UPrimitiveComponent* MyComp,
+	AActor* Other,
+	UPrimitiveComponent* OtherComp,
+	const bool bSelfMoved,
+	const FVector HitLocation,
+	const FVector HitNormal,
+	const FVector NormalImpulse,
+	const FHitResult& Hit)
+{
+	Super::NotifyHit(MyComp, Other, OtherComp, bSelfMoved, HitLocation, HitNormal, NormalImpulse, Hit);
+
+	// ONE impulse, THREE channels. Camera shake, impact audio and haptics all
+	// read the same number from the same event, which is what stops a collision
+	// that looks minor from sounding severe or feeling wrong. Three channels
+	// disagreeing about the same event is worse than any one being absent.
+	const float Impulse = NormalImpulse.Size();
+
+	// Ignore the continuous micro-contacts of a car resting on the road. Without
+	// a floor, a stationary vehicle reports a stream of tiny hits and the
+	// controller buzzes on the grid.
+	static constexpr float MinReportableImpulse = 200.f;
+	if (Impulse < MinReportableImpulse)
+	{
+		return;
+	}
+
+	if (ChaseCamera)  { ChaseCamera->ReportImpact(Impulse); }
+	if (VehicleAudio) { VehicleAudio->ReportImpact(Impulse); }
+	if (Haptics)      { Haptics->ReportImpact(Impulse); }
 }

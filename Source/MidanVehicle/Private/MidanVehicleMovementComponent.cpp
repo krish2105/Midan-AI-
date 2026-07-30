@@ -145,6 +145,17 @@ void UMidanVehicleMovementComponent::TickComponent(
 	CachedLateralG = FVector::DotProduct(AccelCmS2, Right) / MidanMath::GravityCmS2;
 }
 
+float UMidanVehicleMovementComponent::GetWheelSlipRatio(const int32 WheelIndex) const
+{
+	if (WheelIndex < 0 || WheelIndex >= Wheels.Num())
+	{
+		return 0.f;
+	}
+
+	// API VERIFY: FWheelStatus::LongitudinalSlip on 5.8 — docs/ASSUMPTIONS.md A27.
+	return GetWheelState(WheelIndex).LongitudinalSlip;
+}
+
 void UMidanVehicleMovementComponent::WriteWheelPhysicsToFrameState(FMidanVehicleFrameState& OutState) const
 {
 	const int32 WheelCount = FMath::Min(Wheels.Num(), MidanVehicleConstants::NumWheels);

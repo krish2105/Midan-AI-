@@ -75,6 +75,22 @@ public:
 	 *  component needs to know about the other. */
 	void WriteWheelPhysicsToFrameState(FMidanVehicleFrameState& OutState) const;
 
+	/** Input as commanded by the driver, BEFORE assists. */
+	const FMidanVehicleInputState& GetCommandedInput() const { return CommandedInput; }
+
+	/**
+	 * Input as actually fed to the solver, AFTER assists.
+	 *
+	 * The difference between this and GetCommandedInput is how you prove an
+	 * assist is behaving — and it is what the audio layer needs, because the
+	 * engine responds to what the car did, not to what the driver asked for.
+	 */
+	const FMidanVehicleInputState& GetEffectiveInput() const { return EffectiveInput; }
+
+	/** Longitudinal slip ratio for one wheel. Bounds-checked; returns 0 for an
+	 *  out-of-range index rather than reading past the array. */
+	float GetWheelSlipRatio(int32 WheelIndex) const;
+
 	//~ UActorComponent
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;

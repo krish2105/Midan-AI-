@@ -342,3 +342,115 @@ validator that fights the design gets switched off.
 engine is installed, check them against
 `Engine/Plugins/Runtime/ChaosVehicles/Source/ChaosVehicles/Public/` and paste any compile
 errors — see `docs/ASSUMPTIONS.md` A21 for the three known version-sensitive spots.
+
+---
+
+## Phase 4 — Feel layer
+
+The components are written. **None of them does anything until a human authors the
+curves.** That is not a defect — it is the design: every feel value is a curve in
+`UVehicleFeelDataAsset`, and code that invented defaults would be a second source of truth
+competing with the asset.
+
+This section is the Phase 4 gate deliverable: **every curve you must author, its domain,
+its recommended shape, and what going wrong feels like.**
+
+### 4.1 How to author these
+
+1. **Create one `UVehicleFeelDataAsset` per car** in `Content/Midan/Vehicles/`, and point
+   each `UVehicleSetupDataAsset::Feel` at its own. The three cars must NOT share one — the
+   camera is a large part of why Sahm feels different from Hajar.
+2. **Author Deep Night first** if you are also tuning lighting, so the camera is judged
+   against the hero preset.
+3. **Change one curve at a time.** Two simultaneous changes teach you nothing about either.
+4. **Overshoot deliberately, then come back.** Push each value until it is obviously wrong
+   in both directions to find the usable range, then bisect. Starting from the recommended
+   value and nudging finds a local optimum and stays there.
+5. **Test at more than one frame rate.** All damping here is frame-rate independent by
+   construction, and this is how you confirm it.
+6. **Take breaks.** Sensitivity to feel degrades within about twenty minutes, and the
+   version you converge on while numb will be over-tuned.
+
+### 4.2 Camera curves — per mode, four modes per car
+
+X axis is **normalised speed 0..1**, where 1.0 is `SpeedNormalisationKmh` (default 320).
+All four modes need all three curves.
+
+| Curve | Domain → Range | Recommended shape | What wrong feels like |
+|---|---|---|---|
+| **`FOVOffsetBySpeed`** | 0..1 → 0..28 | Flat to ~0.2, then rising, steepest 0.4–0.8, flattening at 1.0. ART_DIRECTION §5 wants 72° base reaching 95–100°, so end at **23–28**. | **The single biggest speed lever.** Too flat and 250 km/h feels like 80. Too steep and the car appears to shrink; a linear ramp makes low speed feel sluggish. |
+| **`LocationLagBySpeed`** | 0..1 → 8..12 | Gently *falling* — more lag at speed. | Too high (stiff) and the car has no mass. Too low and the camera swims and induces motion sickness. |
+| **`RotationLagBySpeed`** | 0..1 → 6..9 | Gently falling, always **below** the location lag. | Rotation lag above location lag makes the camera point away from travel through a corner, which reads as broken. |
+
+Per-mode scalar starting points, from ART_DIRECTION §5:
+
+| Mode | `ArmLengthCm` | `HeightCm` | `PitchDegrees` | `LookAheadYawDegrees` | `SlipYawDegrees` | `VerticalDamping` |
+|---|---|---|---|---|---|---|
+| ChaseFar | 600–650 | 200–220 | −7 to −9 | 4 | 6 | 0.7 |
+| ChaseNear | 450–550 | 170–190 | −6 to −7 | 3 | 5 | 0.7 |
+| Bonnet | 150–200 *(forward offset, not a boom)* | 110–130 | −2 to 0 | **0** *(ignored)* | 4 | **0.85** |
+| Cockpit | −20 to 20 | 105–120 | 0 to 2 | **0** *(ignored)* | 4 | **0.9** |
+
+Vertical damping is **higher** on the rigid modes, not lower: a rigid camera takes the full
+suspension chatter directly, and unfiltered chatter at head height is genuinely nauseating.
+
+### 4.3 Shake and rumble
+
+| Curve | Domain → Range | Recommended shape | What wrong feels like |
+|---|---|---|---|
+| **`ImpactShakeByImpulse`** | 0..1 *(normalised by `FullScaleImpactImpulse`)* → 0..6 degrees | Rising, slightly concave. Near-zero below 0.1 so scrapes do not shake. | Linear-from-zero makes every barrier brush shake the screen. Too high at 1.0 and a crash hides the road at the moment you most need to see it. |
+| **`SurfaceRumbleByRoughness`** | 0..1 → 0..0.8 degrees | Near-linear, gentle. **Keep it small.** | Above ~1.0 degree it stops reading as texture and starts reading as a broken camera. |
+
+### 4.4 Audio curves
+
+| Curve | Domain → Range | Recommended shape | What wrong feels like |
+|---|---|---|---|
+| **`WindGainBySpeed`** | 0..1 → 0..1 | Silent to ~0.15, then rising roughly with the square of speed. | Linear from zero puts wind noise at a standstill. Too loud at the top and it masks the engine, which is the sound players actually want. |
+| **`TyreScrubGainBySlip`** | 0..1 → 0..1 | Near-zero below the tyre's slip threshold, then rising sharply, flattening by 0.6. | A gentle ramp makes the car sound like it is sliding when it is gripping, which destroys the audio cue entirely. |
+
+Evaluated **per axle** at runtime, so understeer and oversteer sound different. That is the
+clearest cue the player has about which end is letting go — do not author it flat.
+
+### 4.5 FX and post curves
+
+| Curve | Domain → Range | Recommended shape | What wrong feels like |
+|---|---|---|---|
+| **`TyreSmokeRateBySlip`** | 0..1 → 0..(system max) | Zero below ~0.25, then rising steeply. | Smoke at low slip makes the car look permanently out of control. |
+| **`ChromaticAberrationBySpeed`** | 0..1 → 0..0.4 | Zero to ~0.3 speed, then gentle rise. ART_DIRECTION §6: **0.2–0.4 max.** | Perceptible at rest reads as a broken lens. If a reviewer can name the effect, it is too strong. |
+| **`VignetteBySpeed`** | 0..1 → 0.3..0.4 | Nearly flat; slight rise with speed. | Above 0.5 the frame looks like a telescope. |
+| **`MotionBlurBySpeed`** | 0..1 → 0..0.5 | Rising from ~0.1 speed. ART_DIRECTION §6: **0.4–0.5 object blur.** | Too low and speed does not read. **Never author this to zero** — it is feel, not fidelity (§7.3). The player's slider handles personal preference. |
+
+### 4.6 Haptic curve
+
+| Curve | Domain → Range | Recommended shape | What wrong feels like |
+|---|---|---|---|
+| **`HapticAmplitudeByImpulse`** | 0..1 → 0..1 | **Match `ImpactShakeByImpulse`'s shape.** | If the two disagree, a collision that looks minor feels severe and the player stops trusting both channels. |
+
+### 4.7 Assets you must author or source
+
+| Asset | Notes |
+|---|---|
+| `EngineSound` — MetaSound | **Minimum four RPM layers**, in **separate on-load and off-load sets**. Parameters pushed by code: `RPM`, `Load`, `Speed`, `Gear`, `Shifting`. Single-axis RPM blending produces a whine; the load axis is what makes lifting off mean something. |
+| `TyreScrubSound` — MetaSound | Parameters: `SlipFront`, `SlipRear`, `SurfaceRoughness`. Gravel and tarmac should be different *sounds*, not one sound at different volumes. |
+| `WindSound` | Parameter: `Speed`. |
+| `ImpactSound`, `BackfireSound` | One-shots. Code applies per-instance pitch variation. |
+| `TyreSmokeSystem` — Niagara | Must expose a **`SpawnRate`** float user parameter. Code sets rate; the system never self-activates. |
+| `ExhaustBackfireSystem` — Niagara | One-shot burst. |
+| `SkidDecalMaterial` | Deferred decal. Pool size defaults to 96 per vehicle. |
+| 5 × `UForceFeedbackEffect` | Idle, surface, slip (**looping**); impact, kerb (**one-shot**). |
+
+### 4.8 Known gaps at this gate
+
+- **Nothing is verified.** No engine is installed, so none of this has been compiled or
+  driven. Every Chaos and force-feedback call is marked `API VERIFY` — see
+  `docs/ASSUMPTIONS.md` A27 and A30.
+- **Looping force-feedback amplitude modulation is the least certain API** in the phase.
+  The channel design (two continuous, two transient, all sharing the impulse curve family)
+  is what matters and does not change with the accessor's spelling.
+- **The three continuous haptic loops are never spawned yet.** `IdleRumble`,
+  `SurfaceRumble` and `SlipRumble` are declared and modulated but not created, pending the
+  5.8 API check above. Transient impacts and kerb strikes work through
+  `ClientPlayForceFeedback` and do not depend on it.
+- **Budget real time for the tuning itself.** Code delivers every system and every curve
+  correctly wired; the result will still feel wrong until a human sits down and tunes it.
+  Studios employ specialists for this.

@@ -98,6 +98,18 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Midan|Vehicle")
 	UVehicleAeroComponent* GetAero() const { return Aero; }
 
+	UFUNCTION(BlueprintPure, Category = "Midan|Vehicle")
+	class UMidanChaseCameraComponent* GetChaseCamera() const { return ChaseCamera; }
+
+	UFUNCTION(BlueprintPure, Category = "Midan|Vehicle")
+	class UVehicleAudioComponent* GetVehicleAudio() const { return VehicleAudio; }
+
+	UFUNCTION(BlueprintPure, Category = "Midan|Vehicle")
+	class UVehicleFXComponent* GetVehicleFX() const { return VehicleFX; }
+
+	UFUNCTION(BlueprintPure, Category = "Midan|Vehicle")
+	class UVehicleHapticsComponent* GetHaptics() const { return Haptics; }
+
 	/** True once the setup asset has loaded and been applied. Until then the car
 	 *  has engine defaults and must not be judged for feel. */
 	UFUNCTION(BlueprintPure, Category = "Midan|Vehicle")
@@ -109,6 +121,8 @@ public:
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void UnPossessed() override;
+	virtual void NotifyHit(UPrimitiveComponent* MyComp, AActor* Other, UPrimitiveComponent* OtherComp,
+		bool bSelfMoved, FVector HitLocation, FVector HitNormal, FVector NormalImpulse, const FHitResult& Hit) override;
 
 protected:
 	/**
@@ -122,6 +136,17 @@ protected:
 	 */
 	void RequestSetupLoad();
 	void OnSetupLoaded();
+
+	/**
+	 * Second load pass, for assets referenced BY the setup asset.
+	 *
+	 * The feel asset is a soft pointer inside UVehicleSetupDataAsset, so its
+	 * path is not knowable until the setup asset itself has loaded. Chaining a
+	 * second request is the cost of not hard-referencing it — the alternative
+	 * would be a synchronous load, which CLAUDE.md forbids.
+	 */
+	void RequestFeelLoad();
+	void OnFeelLoaded();
 
 	/** Apply the loaded asset to every component that needs it. */
 	void ApplyLoadedSetup();
@@ -147,6 +172,29 @@ private:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Midan|Components", meta = (AllowPrivateAccess = "true"))
 	TObjectPtr<UVehicleInputComponent> MidanInput;
 
+	//~ Phase 4 feel layer. Present on every vehicle including AI, deliberately.
+	//  Opponent cars need audio and FX — a silent, smokeless AI car is the
+	//  clearest possible tell that it is not a real participant. Only the
+	//  camera and haptics are player-only in effect, and both no-op cleanly on
+	//  an AI pawn rather than being conditionally created, so player and AI
+	//  pawns stay structurally identical.
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Midan|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UMidanChaseCameraComponent> ChaseCamera;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Midan|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UVehicleAudioComponent> VehicleAudio;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Midan|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UVehicleFXComponent> VehicleFX;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Midan|Components", meta = (AllowPrivateAccess = "true"))
+	TObjectPtr<class UVehicleHapticsComponent> Haptics;
+
+	/** Feel asset, resolved alongside the setup asset. */
+	UPROPERTY(Transient)
+	TObjectPtr<const class UVehicleFeelDataAsset> LoadedFeel;
+
 	/** Resolved setup, valid once loaded. */
 	UPROPERTY(Transient)
 	TObjectPtr<const UVehicleSetupDataAsset> LoadedSetup;
@@ -160,6 +208,10 @@ private:
 	/** Handle for the async load, so a pawn destroyed mid-load cancels cleanly
 	 *  rather than completing into a dangling this. */
 	TSharedPtr<struct FStreamableHandle> SetupLoadHandle;
+
+	/** Handle for the chained feel-asset load. Separate from SetupLoadHandle so
+	 *  cancelling one on teardown does not silently leave the other in flight. */
+	TSharedPtr<struct FStreamableHandle> FeelLoadHandle;
 
 	FMidanVehicleInputState LastAppliedInput;
 

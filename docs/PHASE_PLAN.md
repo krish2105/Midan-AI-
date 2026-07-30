@@ -13,7 +13,7 @@ document is the file manifest and the order of work.
 | 1 | **files written · gate BLOCKED on engine install** | Opus 5 | Project scaffold, six modules compile |
 | 2 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Vehicle data architecture |
 | 3 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Vehicle core |
-| 4 | not started | Opus 5 | Feel layer — HUD spec mockup done ahead of schedule |
+| 4 | **files written · gate BLOCKED on engine install** | Opus 5 | Feel layer |
 | 5 | not started | Sonnet 5 | Track & race systems |
 | 6 | not started | Sonnet 5 | AI opponents |
 | 7 | not started | Sonnet 5 | Race flow & UI |

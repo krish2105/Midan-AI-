@@ -361,6 +361,60 @@ Chaos wheel setups are built one-per-wheel at apply time. Supporting a different
 rewrite of all three, not a value change — and all three vehicles in
 `docs/VEHICLE_SPEC.md` have four wheels.
 
+### A29 — Two camera mode classes, not four · Phase 4
+
+`docs/PHASE_PLAN.md` listed four camera mode files: ChaseFar, ChaseNear, Bonnet, Cockpit.
+
+**Found:** there are only two BEHAVIOURS. ChaseFar and ChaseNear are a lagging boom
+differing only in `FMidanCameraModeConfig` values; Bonnet and Cockpit are chassis-attached
+and likewise differ only in data. Four classes would have been identical code with different
+numbers.
+
+**Assumed:** `FMidanBoomCameraMode` and `FMidanRigidCameraMode`. The mode COUNT is still
+four and the player still cycles four; the variation lives entirely in the Data Asset, which
+is the actual rule in CLAUDE.md rather than a deviation from it.
+
+Both are plain C++ types with no `UWorld` dependency, so an Automation Spec can assert that
+a 30-degree slip angle produces the authored slip yaw without spawning a car.
+
+### A30 — Phase 4 moved nine values out of code into the Feel asset
+
+A literal audit after the first Phase 4 pass found hardcoded values that were genuinely feel
+tuning — the kind a human adjusts by ear or eye — which CLAUDE.md forbids in C++.
+
+Moved to `UVehicleFeelDataAsset` / `FMidanCameraModeConfig`: `LookAheadDampingRate`,
+`SlipYawDampingRate`, `VerticalDampingRateMax`/`Min`, `ShakeDecayRate`, `RumbleFadeRate`,
+`FullScaleImpactImpulse`, `EngineLoadSmoothingRate`, `OverrunLoadWeight`,
+`BackfireLoadThreshold`, `KerbStrikeIntensity`, `HapticSmoothingRate`,
+`IdleRumbleFadeOutSpeedKmh`.
+
+**Deliberately left as named constants**, each with a justification comment: the rumble
+oscillator frequency ratios (they define "incommensurable", not a preference), the phase
+wrap bound (float precision), `FullySidewaysAngleDegrees` (a denominator that would silently
+rescale every authored value if changed), the shift-flag duration and backfire/kerb
+cooldowns (event pacing, not character), and the minimum impact volume (a zero-volume
+impact is a missing sound, which is a bug rather than a taste).
+
+`FullScaleImpactImpulse` is deliberately SHARED by camera, audio and haptics. Three channels
+disagreeing about how big the same collision was is worse than any one of them missing.
+
+### A31 — Continuous force-feedback loops are declared but never spawned · Phase 4
+
+`UVehicleHapticsComponent` declares `IdleRumble`, `SurfaceRumble` and `SlipRumble` and
+modulates their intensity every frame, but never creates them.
+
+**Reason:** the mechanism for modulating a LOOPING force feedback effect's amplitude at
+runtime is the least certain API in the phase, and no engine is installed to check it
+against. Spawning them against a guessed API would produce three silent components and a
+false impression that the channel works.
+
+Transient impacts and kerb strikes DO work — they go through `ClientPlayForceFeedback`,
+which is a stable API.
+
+**To close:** confirm the 5.8 looping-effect API, then spawn the three loops in
+`InitialiseFromAsset`. The channel design does not change. Recorded in
+`docs/MANUAL_STEPS.md` §4.8. Related: A27.
+
 ### A16 — Vehicle names chosen · RESOLVED, one check outstanding
 
 `docs/VEHICLE_SPEC.md` previously read `## 1. [Name] — Hypercar` for all three cars.
