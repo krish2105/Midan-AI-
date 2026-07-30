@@ -4,15 +4,35 @@ Every third-party asset in this project is recorded here, on the same commit tha
 asset. An asset without a row is a licensing liability, and "I'll document it later" is how
 a portfolio piece becomes unpublishable.
 
-**Currently empty — no third-party assets have been added.**
+**No third-party assets in `Content/`.** Two generated concept references live in `docs/`
+and are recorded below.
 
 ---
 
 ## Ledger
 
-| Asset | Path in `Content/` | Source | Licence | Author | Date added | Modified? |
+| Asset | Path | Source | Licence | Author | Date added | Modified? |
 |---|---|---|---|---|---|---|
-| *(none yet)* | | | | | | |
+| Hypercar concept reference | `docs/concept/concept_hyper.png` | Generated (Higgsfield, nano-banana-pro) | Original generated work — no third-party rights asserted | Generated to a Midan-authored prompt | 2026-07-30 | No |
+| GT concept reference | `docs/concept/concept_gt.png` | Generated (Higgsfield, nano-banana-pro) | Original generated work — no third-party rights asserted | Generated to a Midan-authored prompt | 2026-07-30 | No |
+| Rally concept reference | *not yet generated* | — | — | — | — | Blocked: image-generation credits exhausted |
+
+### Notes on the generated concepts
+
+These are **design references**, not shipped assets. They do not enter `Content/`; they exist
+so the Blender model has an authority to be built against (`docs/ART_DIRECTION.md` §4.3).
+
+**§0 review performed, and its limits stated honestly.** Both images were checked against the
+legal boundary: no badge, no wordmark, no text, no manufacturer-identifiable grille, and the
+quad-circular tail lamp arrangement on the hypercar is a broad automotive convention that §0
+explicitly permits. Each silhouette reads as a generic archetype — mid-engine hypercar,
+front-engine long-bonnet GT — rather than a specific model.
+
+**But §0's actual test is "if a car enthusiast can name it, redesign it", and that test needs
+an enthusiast.** This review was done by Claude, which is not one. Before either design is
+committed to in Blender, have someone who follows cars closely confirm neither reads as a
+specific model. The GT's long-bonnet/short-deck proportions in particular sit close to a
+recognisable family archetype, and archetype is fine while a traceable silhouette is not.
 
 ---
 
