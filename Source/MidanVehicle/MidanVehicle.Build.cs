@@ -26,7 +26,12 @@ public class MidanVehicle : ModuleRules
 
 		PrivateDependencyModuleNames.AddRange(new[]
 		{
-			"InputCore"
+			"InputCore",
+			// Phase 3: UVehicleInputComponent binds Enhanced Input actions and
+			// pushes the driving mapping context. Private because no public
+			// header exposes an Enhanced Input type — the input config asset
+			// holds only TSoftObjectPtr, which needs a forward declaration.
+			"EnhancedInput"
 		});
 	}
 }

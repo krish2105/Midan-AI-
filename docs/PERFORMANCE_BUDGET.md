@@ -8,28 +8,53 @@ in master prompt §5.1. 1440p is a documented stretch tier, not a gate.
 filled in from Phase 8 onward. A number that has not been measured does not go in this
 document.
 
+> **Tracks `ART_DIRECTION.md` v2.0** — the neon city pivot with three static time-of-day
+> presets. The v1.0 golden-hour canyon allocation is retained below for comparison, because
+> the re-allocation is net zero and knowing *why* each line moved is what makes the new
+> numbers defensible rather than arbitrary.
+
 ---
 
 ## 1. GPU budget
 
-| Line | Budget (ms) | Measured | Verdict |
-|---|---|---|---|
-| **Total frame** | **16.6** | — | — |
-| **GPU total** | **≤ 15.0** | — | — |
-| — Base pass (Nanite) | ≤ 3.0 | — | — |
-| — Lumen GI + reflections | ≤ 3.5 | — | — |
-| — Virtual Shadow Maps | ≤ 2.5 | — | — |
-| — Volumetric fog + clouds | ≤ 1.5 | — | — |
-| — Post + TSR | ≤ 2.5 | — | — |
-| — Translucency / particles | ≤ 1.0 | — | — |
+| Line | v1.0 | **Budget (ms)** | Measured | Verdict |
+|---|---|---|---|---|
+| **Total frame** | 16.6 | **16.6** | — | — |
+| **GPU total** | ≤ 15.0 | **≤ 15.0** | — | — |
+| — Base pass (Nanite) | ≤ 3.0 | **≤ 3.0** | — | — |
+| — Lumen GI + reflections | ≤ 3.5 | **≤ 4.0** | — | — |
+| — Virtual Shadow Maps | ≤ 2.5 | **≤ 1.5** | — | — |
+| — Volumetric fog (clouds cut) | ≤ 1.5 | **≤ 1.0** | — | — |
+| — Local lights + emissive | *(absent)* | **≤ 0.75** | — | — |
+| — Post + TSR | ≤ 2.5 | **≤ 2.5** | — | — |
+| — Translucency / particles / rain | ≤ 1.0 | **≤ 1.25** | — | — |
 
-The six sub-lines sum to **14.0 ms**, leaving **1.0 ms unallocated** against the ≤ 15.0 ms
-GPU total.
+The seven sub-lines sum to **14.0 ms**, leaving **1.0 ms unallocated** against the ≤ 15.0 ms
+GPU total — identical to v1.0. The pivot is a **net-zero re-allocation**: night removes the
+low-angle directional light that made Virtual Shadow Maps v1.0's largest risk, and that
+1.0 ms saving funds Lumen reflections, emissive signage and rain.
 
-That 1.0 ms is contingency, not spare capacity. It absorbs the variance between a quiet
-frame and a worst-case frame — eight cars in frame, tyre smoke, low sun through a canyon
-gap. It is not available for a new feature without a written trade against an existing
-line.
+That 1.0 ms is contingency, not spare capacity. It absorbs the variance between a quiet frame
+and a worst-case frame — eight cars in frame, wheel spray, rain, and three hero signs
+reflecting off standing water. It is not available for a new feature without a written trade
+against an existing line.
+
+### 1.1 Hold the budget at the worst preset, per line
+
+Three time-of-day presets means each line has a different worst case, and the budget must
+pass on **all three**:
+
+| Line | Worst preset | Why |
+|---|---|---|
+| Virtual Shadow Maps | **Day** | The only preset with a real sun and a full directional cascade |
+| Lumen GI + reflections | **Deep Night** | Emissive-driven indirect plus full standing-water reflection |
+| Local lights + emissive | **Deep Night** | All signage lit, rect lights active |
+| Translucency / rain | **Deep Night** | Active rain plus wheel spray |
+| Volumetric fog | **Deep Night** | Highest fog density, for neon bloom through haze |
+| Base pass, Post + TSR | equal | Geometry and resolution do not vary by preset |
+
+A run that passes on Deep Night and fails on Day has not passed. `perf_report.py` (Phase 8)
+takes the preset as a parameter and the gate requires three passing runs.
 
 ## 2. CPU budget
 
@@ -112,46 +137,83 @@ Further reporting rules:
 
 ## 5. What to cut, in order
 
-From `ART_DIRECTION.md` §7.3. When over budget, cut in this sequence:
+From `ART_DIRECTION.md` v2.0 §7.3. When over budget, cut in this sequence:
 
-1. Volumetric clouds
-2. Lumen reflection quality
-3. VSM resolution
-4. Screen percentage (TSR absorbs a surprising amount)
-5. Foliage density
+1. Volumetric clouds — already effectively gone at night; remove entirely
+2. **Rain particle density** — the post-process droplet layer carries the effect
+3. Lumen reflection **quality** — never wetness itself (see §6.1)
+4. **Number of shadow-casting rect lights**
+5. VSM resolution
+6. Screen percentage (TSR absorbs a surprising amount)
+7. Street-level PCG scatter density
 
-**Never cut film grain, the exposure clamp, or motion blur.** Those are feel, not
-fidelity, and cutting them costs more than the frame time they return. Film grain is also
-what hides 8-bit banding in the sky gradient — removing it creates a visible artefact, not
-just a plainer image.
+**Never cut film grain, the exposure clamp, or motion blur.** Those are feel, not fidelity,
+and cutting them costs more than the frame time they return. Film grain matters *more* at
+night than it did at golden hour: night scenes are large smooth dark gradients, which band
+worse than a bright sky does.
+
+**Never cut the wet-road roughness variation.** It is a material, not a render pass — it
+costs essentially nothing and it is the entire look. There is no version of this art
+direction with a uniform-roughness road.
 
 ---
 
-## 6. The three costs that will bite
+## 6. The four costs that will bite
 
-From `ART_DIRECTION.md` §7.2.
+From `ART_DIRECTION.md` v2.0 §7.2. Reordered for the neon city — the old number-one risk is
+gone, eliminated by the pivot rather than solved.
 
-### 6.1 VSM page pool under a low directional light
+### 6.1 Lumen reflections on wet asphalt — the new number one
 
-The art direction locks the sun at **−3° to −6° pitch**, aligned to the main straight, in
-an open canyon. Long shadows across a wide open space is precisely the Virtual Shadow Maps
-worst case, and this project has chosen it deliberately for the lighting.
+A low-roughness surface covering the entire play area is the worst possible input for a
+reflection system, and `ART_DIRECTION.md` §2.3 makes wet road the foundation of the whole
+look. This is not a risk to be mitigated away; it is the thing being paid for.
 
-Mitigation: clamp `r.Shadow.Virtual.ResolutionLodBiasDirectional` and measure. If VSM
-exceeds 2.5 ms, **raise the bias before cutting anything else.**
+Mitigation, in order: keep **software tracing**; clamp max trace distance to the street
+width rather than leaving it at default; reduce reflection **quality** before reducing
+wetness. A lower-quality reflection on a wet road still reads as wet. A dry road does not
+read at all.
 
-### 6.2 Volumetric clouds
+### 6.2 Emissive count and Lumen scene update
 
-Frequently 2 ms or more. Measure them in isolation. If they cost more than 1.0 ms, replace
-them with a cloud texture on the sky dome — at 250 km/h nobody is studying cloud detail.
-The volumetric-fog-and-clouds line is 1.5 ms **combined**, and the fog is the part that
-earns its cost: exponential height fog with volumetric enabled is what creates the layered
-depth on distant peaks, and it is the cheapest atmosphere available.
+Every emissive surface is a potential indirect light source, and §2.2 makes signage the
+primary lighting rig. Many small signs cost more than a few large ones for the same visual
+result.
 
-### 6.3 Lumen in a wide-open environment
+Mitigation: consolidate. One large sign beats six small ones, in the profile and
+artistically. Measure the Lumen scene-update cost separately from the trace cost — they
+scale with different things.
 
-Software tracing (already locked). Clamp max trace distance to what the canyon actually
-needs rather than leaving it at default, and lean on the sky light for distant fill.
+### 6.3 Shadow-casting local lights
+
+Each rect light that casts shadows is a real cost. `ART_DIRECTION.md` §2.2 restricts them to
+two or three hero signs deliberately.
+
+Mitigation: if the count creeps past four or five, the `local lights + emissive` line will
+blow before any other. Emissive-only signage costs a fraction of a shadow-casting rect light
+and covers the great majority of the signage.
+
+### 6.4 Rain particle overdraw
+
+Rain is translucent geometry filling the screen — the textbook overdraw case, and it lands
+on the tightest line in the budget (1.25 ms shared with all other translucency and
+particles).
+
+Mitigation: measure rain in isolation. Prefer fewer, larger, better-textured streak
+particles over many thin ones, and lean on the screen-space droplet layer in post, which is
+cheaper and does more for the sensation of rain than the particles do.
+
+### 6.5 Retired from v1.0
+
+Recorded because a reader comparing versions will ask what happened to them:
+
+- **VSM under a low-angle directional light** — was the v1.0 number-one risk. Deep Night has
+  the directional light off entirely and Night has it at moonlight intensity, so the
+  catastrophic case does not exist in the hero preset. Day remains the VSM worst case but its
+  sun is at −25° to −40°, not −3° to −6°, which is a far cheaper cascade. This is where the
+  1.0 ms funding the rest of the pivot came from.
+- **Volumetric clouds** — cut. At night there is no cloud detail to see. Fog remains and
+  remains important; 1.0 ms covers fog alone.
 
 ### 6.4 Metal parity — verify before locking
 

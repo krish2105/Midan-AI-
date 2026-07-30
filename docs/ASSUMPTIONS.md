@@ -236,6 +236,131 @@ without a second source of truth.
 
 ## Open — needs your decision before the phase noted
 
+### A22 — Art direction pivoted to a neon night city · decided at Phase 3
+
+**Found:** three reference images were supplied showing a wet neon night city in the
+Need-for-Speed / GRID idiom, with a request to match them and to add day, night and deep-night
+lighting. `ART_DIRECTION.md` v1.0 specified a golden-hour desert canyon with time-of-day
+**locked to one condition** (§2.4), and the master prompt's non-goals list forbids
+*"dynamic weather · day/night cycle"*.
+
+**Resolved with the user:** full pivot. `ART_DIRECTION.md` v2.0 rewrites §2, §3 and §7 for a
+wet neon city circuit with **three static presets** (Day, Night, Deep Night). Not a cycle —
+that distinction is what keeps the §6 exposure clamp workable and the PSO surface finite, and
+it keeps the master-prompt non-goal technically intact.
+
+**Accepted costs, recorded so they are not rediscovered:**
+
+| Cost | Consequence |
+|---|---|
+| 3× lighting authoring | Three complete light rigs plus three post presets, authored Deep Night first |
+| ~3× PSO cache coverage | Master prompt §7.3's collection playthrough runs three times; shipped cache is the union. Skipping one ships a build that hitches on first selection of that preset |
+| Environment bill of materials replaced | §3 canyon rock → modular city facade kit, signage library, urban furniture. Megascans cliff plan discarded |
+| Budget re-allocated | See A23 |
+| Day preset is now the VSM worst case | The budget must pass on all three presets, not just the hero one |
+
+**What did NOT change:** §0 legal boundary, §4 vehicle art spec, §5 camera spec, §6 post
+stack, §8 HUD spec, §9 screenshot discipline. The 16.6 ms total and the ≤ 15.0 ms GPU total
+are untouched.
+
+### A23 — The pivot is a net-zero budget re-allocation, not a budget increase
+
+Night **removes** v1.0's largest performance risk: a −3° to −6° directional light casting
+shadows across open terrain. Deep Night has no directional light at all. That frees 1.0 ms of
+Virtual Shadow Map budget, which funds Lumen reflections (+0.5), a new local-lights/emissive
+line (+0.75), and rain (+0.25), against volumetric clouds being cut (−0.5).
+
+Sub-lines still sum to 14.0 ms with 1.0 ms contingency — arithmetically identical to v1.0.
+
+**Assumed:** the re-allocation holds without a change to the 16.6 ms frame target, so
+`CLAUDE.md`'s "changing the frame budget targets" stop condition is not tripped — the *total*
+is unchanged and only its internal distribution moved. Flag this if you read it differently;
+it is the one place where the pivot could be argued to need separate approval.
+
+### A24 — 21st.dev and premium-frontend produce React, not UMG
+
+**Found:** the request named 21st.dev MCP and the premium-frontend skill for the HUD. Both
+target React/Motion/Three.js. Unreal's HUD is UMG/Slate. There is no direct transfer.
+
+**Resolved with the user:** build a high-fidelity animated **web mockup as the authoritative
+visual spec**, then translate to UMG C++ at Phase 7. Precedent exists in the repo —
+`docs/midan_frontend_ui_screens_mockup.html` predates this decision.
+
+**Consequence:** the mockup is a *specification artefact*, not shipped product. It must not
+drift from `ART_DIRECTION.md` §8, which remains the authority on layout, bindings and
+accessibility. Where the mockup and §8 disagree, §8 wins and the mockup is wrong.
+
+### A25 — Vehicle art takes all three routes in parallel
+
+**Found:** asked for "best generated cars". Claude Code cannot produce production vehicle
+meshes — topology, separated wheel meshes with correct pivots, a bone rig, and real-world
+metric scale are Blender work, budgeted at two weeks in `ART_DIRECTION.md` §4.3.
+
+**Resolved with the user: all three routes**, which compose into a pipeline rather than
+competing:
+
+1. **Epic Vehicle Game sample mesh as a physics proxy** — the immediate path to a driveable
+   car. Handling tuning can begin the moment the engine is installed, and the proxy swaps out
+   later without touching code, because `UVehicleSetupApplier` reads the mesh from the Data
+   Asset.
+2. **Original concept art sheets** — the design authority the final model is built against.
+   Generated, no real-marque geometry, badge, grille or light signature.
+3. **Image-to-3D GLB blockouts** — visual placeholders only. Explicitly **not** production
+   topology: expect fused wheels, no pivots, no rig, and wrong scale. Useful for framing
+   screenshots and judging proportion, never for shipping.
+
+**The legal boundary applies to all three.** A CC0 licence on a source mesh does not clear
+trade dress, and an image generator asked for "a supercar" will happily produce something
+nameable. Every generated design gets checked against §0 before it enters `Content/`.
+
+### A26 — Three Core interfaces declared at Phase 3, not at their own phases
+
+`docs/PHASE_PLAN.md` schedules `IMidanTrackInterface` and `IMidanRaceStateInterface` for
+Phase 5 and `IMidanTelemetrySource`/`IMidanTelemetrySink` for Phase 9.
+`UMidanServiceLocatorSubsystem` holds a `TScriptInterface` to each and cannot compile
+against a forward declaration — `TScriptInterface<T>` needs the `UInterface` class to exist
+for reflection.
+
+**Assumed:** all three declared in `MidanCore` at Phase 3. They are Core's contracts
+regardless of who implements them, so declaring them early costs nothing and changes no
+dependency. Implementations still land at their planned phases: `AMidanTrackSpline` and
+`AMidanRaceGameState` at Phase 5, `UMidanTelemetrySubsystem` at Phase 9.
+
+Same precedent as A20 (gameplay tags pulled forward from Phase 3 to Phase 2).
+
+### A27 — Async physics callback API not yet verified · Phase 3
+
+`UVehicleAeroComponent` and `UVehicleSurfaceSensorComponent` both run in the async physics
+callback via `AsyncPhysicsTickComponent`, enabled by `SetAsyncPhysicsTickEnabled(true)` in
+`BeginPlay`. Master prompt §1.3 makes async physics non-negotiable and forbids force
+application in `Tick`.
+
+**Unverified, with no engine installed.** Marked `API VERIFY` at each site. The specific
+spellings to confirm on 5.8:
+
+| Call | Where |
+|---|---|
+| `SetAsyncPhysicsTickEnabled` / `AsyncPhysicsTickComponent(float, float)` | both async components |
+| `FWheelStatus` fields — `bInContact`, `LongitudinalSlip`, `LateralSlip`, `SpringForce`, `NormalizedSuspensionLength`, `PhysMaterial` | surface sensor, assists, movement component |
+| `GetWheelState(int32)` on `UChaosWheeledVehicleMovementComponent` | as above |
+| `SetThrottleInput` / `SetBrakeInput` / `SetSteeringInput` / `SetHandbrakeInput` (bool vs float) | movement component |
+| `IncreaseGear` / `DecreaseGear` vs `SetTargetGear` | movement component |
+| `GetEngineRotationSpeed` / `GetCurrentGear` | pawn frame state |
+| `AddForceAtLocation` force units and world-space location | aero component |
+
+**The logic does not depend on the spellings.** A rename at first compile is a mechanical
+fix; the force model, the assist ordering and the surface-lookup design are what the Phase 3
+gate is actually asserting. Related: A3, A21.
+
+### A28 — Vehicles are locked at four wheels
+
+`MidanVehicleConstants::NumWheels = 4` is a `constexpr`, not a Data Asset field. Justified
+under CLAUDE.md's exception because it is structural rather than tuning: the suspension and
+tyre configs are authored per-axle, the surface sensor indexes a fixed array sized by it, and
+Chaos wheel setups are built one-per-wheel at apply time. Supporting a different count is a
+rewrite of all three, not a value change — and all three vehicles in
+`docs/VEHICLE_SPEC.md` have four wheels.
+
 ### A16 — Vehicle names are placeholders · needed by Phase 2
 
 `docs/VEHICLE_SPEC.md` reads `## 1. [Name] — Hypercar` for all three cars. Three original

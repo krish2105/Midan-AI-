@@ -1,6 +1,25 @@
 # MIDAN — ART DIRECTION & RENDERING SPECIFICATION
 **Attach alongside `MIDAN_UE5_RACING_CLAUDE_CODE_MASTER_PROMPT.md`**
-Version 1.0 · Target: 1080p / 60fps primary, 1440p stretch
+Version 2.0 · Target: 1080p / 60fps primary, 1440p stretch
+
+> **v2.0 — art direction pivot.** v1.0 specified a golden-hour desert canyon with a single
+> locked lighting condition. v2.0 replaces it with a **wet neon city circuit at night**,
+> with **three static time-of-day presets** (Day, Night, Deep Night). §2, §3 and §7 are
+> rewritten; §0, §4, §5, §6, §8, §9 carry forward substantially unchanged.
+>
+> **What this costs**, stated plainly so it is not discovered later:
+> - Three lighting conditions triple lighting authoring and roughly triple PSO cache
+>   coverage. The master prompt's §7.3 PSO workflow now needs three passes.
+> - Wet road reflections, neon emissive spill and rain particles all add GPU cost that the
+>   v1.0 budget did not carry. §7.1 is re-allocated accordingly.
+> - A day/night *cycle* remains a **non-goal**. These are three discrete presets selected
+>   before a race, not an animated sun. That distinction is what keeps the exposure clamp
+>   in §6 workable and the PSO surface finite.
+>
+> The reference frames that prompted this pivot contain badged production vehicles and, in
+> one case, a competitor's shipped-product screenshot with real sponsor trade dress. **None
+> of that transfers.** What transfers is design language: wet asphalt with pooled specular,
+> neon emissive spill onto the road, tight urban canyon, rain, motion-blurred speed. See §0.
 
 ---
 
@@ -45,64 +64,209 @@ The reference is a generated photographic image. Being clear about the gap preve
 
 ## 2. Lighting setup — the frame's entire mood comes from here
 
-Golden hour is the correct choice and not just aesthetically: low warm key light with long shadows hides geometry deficiencies, gives free rim lighting on the car, and makes modest assets read as expensive.
+**Night is the hero condition.** Author it first, tune it to finished, and treat Day as the
+supporting variant. The reason is not aesthetic preference: at night the *scene lights
+itself*. Neon signage, shopfronts and headlights become the key light sources, which means
+emissive materials and Lumen do the work that a directional light does in daylight. Wet
+asphalt then reflects all of it, and a modest asset budget reads as expensive because most
+of what the player sees is light rather than geometry.
 
-### 2.1 Directional light (sun)
-| Parameter | Value | Why |
+That is the same principle behind v1.0's golden hour — hide geometry deficiency behind
+dramatic light — applied to a different hour.
+
+### 2.1 The three presets
+
+Three discrete lighting setups. **Not an animated cycle.** Each is a separate set of light
+actor values plus a post-process preset, selected before the race starts.
+
+| | **Deep Night** (hero) | **Night** | **Day** |
+|---|---|---|---|
+| **Read** | Rain-soaked, neon-dominated, near-black sky | Neon-dominated, drier, some ambient city glow | Overcast wet, flat sky, neon still visible |
+| Directional light | **Off**, or moon at 0.02–0.05 lux | Moon 0.05–0.1 lux, 7000–8500K | Sun 8–15 lux, pitch −25° to −40°, 6500K |
+| Sky Light intensity | 0.05–0.15, deep blue-violet | 0.15–0.3, blue | 1.0–2.0, neutral overcast |
+| Dominant key source | **Emissive neon + headlights** | Emissive neon | Sky (overcast dome) |
+| Fog density | Highest — neon bloom through haze | Medium | Low, cool grey |
+| Wetness | Full — standing water, active rain | Damp — pooled specular, no rain | Damp |
+| Exposure target | Lowest; let neon clip slightly | Mid | Highest |
+
+Author in that column order: **Deep Night, then Night, then Day.** Day is the one most
+likely to be cut if the schedule tightens, and building it last means cutting it costs
+nothing already spent.
+
+### 2.2 Neon as the lighting system
+
+This is the single most important section in v2.0. At night, the signage *is* the lighting
+rig.
+
+- **Emissive materials on Lumen-visible geometry.** Sign faces, shopfront panels, tube
+  lettering. Lumen picks up emissive as an indirect source, which is what spills coloured
+  light onto the road and the car. This is why software-traced Lumen is worth its cost here
+  rather than being a compromise.
+- **A small number of saturated hues, deliberately chosen.** Cyan, magenta, warm amber, and
+  one acid green as an accent. Twenty competing colours read as noise; four read as art
+  direction. The reference frames work because each car sits against a *contrasting*
+  dominant hue.
+- **Rect lights for the hero signs only.** Emissive alone will not throw a crisp enough
+  pool onto the road for the two or three signature corners. Add a Rect Light matched to
+  the sign's colour and shape at those locations, and nowhere else — each one is a shadow
+  caster and a real cost.
+- **Colour separation left-to-right.** Where the road runs between two building faces, put
+  opposing hues on either side (cyan left, magenta right). The car picks up both, gets
+  automatic rim separation from the background, and the wet road doubles the effect.
+- **No sign is a real brand.** Original signage only, original lettering, invented
+  wordmarks. §0 applies to storefronts exactly as it applies to cars.
+
+### 2.3 Wet road — where the look actually comes from
+
+The wetness sells the neon. Dry asphalt at night is a black void; wet asphalt is a mirror
+that doubles every light source in the scene.
+
+- **Roughness is the whole trick.** A wet road is a low-roughness, high-specular surface
+  with *variation* — pooled water at near-zero roughness, damp patches mid, dry patches
+  under overhangs high. Uniform low roughness reads as polished plastic, not water.
+- **Puddles as a mask, not as meshes.** Drive roughness and a subtle normal flattening from
+  a large-scale mask along the spline. Standing water is where the road is lowest, so the
+  mask should correlate with the road's banking.
+- **Reflections come from Lumen**, not from planar reflections. Planar reflection actors
+  cost a full scene re-render each and there is no budget line for that.
+- **A faint normal-map ripple** on standing water, animated slowly. Barely perceptible, and
+  it is what stops puddles reading as decals.
+- **Rain is two systems**, and only one of them is particles: a Niagara rain volume for the
+  falling streaks, plus a screen-space droplet/wiper treatment in post. The post layer is
+  cheap and does more for the sensation of rain than the particles do.
+
+### 2.4 Colour temperature contrast (the professional touch)
+
+The v1.0 principle survives the pivot intact — only the sources change. Opposition is what
+creates depth:
+
+| | Warm side | Cool side |
 |---|---|---|
-| Pitch | **-3° to -6°** | Just above the horizon. This is the whole look. |
-| Yaw | Aligned to the track's main straight, ±10° | Sun near the vanishing point gives the backlit silhouette |
-| Intensity | 3–6 lux (physical units) | Low sun is dim; let auto-exposure do the lifting |
-| Temperature | **2700–3200K** | Warm. Do not go below 2500K — it reads as orange filter, not sunlight |
-| Source angle | 1.5–3.0° | Softer shadow edges than default; low sun through atmosphere is not a point source |
-| Cast shadows | On, Virtual Shadow Maps | See §7 for the cost warning |
-| Light shafts | On, subtle | The godray through the canyon gap |
+| Deep Night | Amber sodium signage, headlights, brake lights | Cyan/magenta neon, blue-violet sky light, wet road reflection |
+| Day | Nothing much — overcast is neutral | Cool grey sky dome |
 
-### 2.2 Sky and atmosphere
-- **Sky Atmosphere** component — physically-based scattering does the pink-to-orange gradient for free. Do not paint a skybox.
-- **Sky Light**, real-time capture, intensity ~1.0. This is your cool fill and it is what keeps shadows blue rather than black.
-- **Volumetric Cloud** with a thin, wispy profile. Keep coverage low — the reference has streaky high cloud, not cumulus. Volumetric clouds are expensive; if they cost more than 1.0ms, replace with a cloud texture on the sky.
-- **Exponential Height Fog**, volumetric enabled. Fog inscattering colour warm-tinted toward the sun. This creates the layered depth on the distant peaks and it is the cheapest atmosphere you will ever buy.
+If a night scene looks flat, the cause is almost always that **everything has drifted to the
+same hue**. Push one side of the street warmer before touching anything else. And if a
+shadow has gone neutral grey, raise sky light saturation — a night shadow should be
+blue-violet or it reads as underexposed rather than dark.
 
-### 2.3 Colour temperature contrast (the professional touch)
-The frame works because warm key and cool fill are in opposition:
-- Key light: 2900K warm
-- Sky light fill: naturally cool blue
-- Bounce off red rock: warm secondary
-- Shadow interiors: blue-violet, never neutral grey
+Day is the harder preset to make interesting, precisely because it has no opposition. Lean
+on wet-road specular and keep the neon *on* even in daylight — a lit sign against an
+overcast sky is a real and appealing look, and it means the neon authoring is not wasted.
 
-If your scene looks flat, it is almost always because shadows have gone grey. Push sky light saturation before you touch anything else.
+### 2.5 Time-of-day is three presets, not a cycle
 
-### 2.4 Time-of-day is locked
-**One lighting condition only.** Do not build a day/night cycle. It multiplies your lighting authoring, your PSO cache coverage, and your testing surface for a vertical slice that will be viewed for 90 seconds. Lock the sun, bake what you can, and spend the time on the car.
+**No animated sun. No dynamic transition.** A cycle would multiply the exposure-clamp
+problem in §6 by every intermediate state, make the Lumen and VSM worst cases unbounded,
+and expand PSO coverage without limit. It is also an explicit master-prompt non-goal.
+
+Three presets is already three times the lighting authoring and roughly three times the
+PSO cache work of v1.0. That is the accepted cost of this pivot. Anything beyond it is not.
+
+**Consequence for §7.3 of the master prompt:** the scripted PSO collection playthrough now
+runs three times, once per preset, and the bundled cache is the union. Skipping a preset
+means shipping a build that hitches the first time a player selects it.
 
 ---
 
 ## 3. Environment bill of materials
 
-Build the track as a kit, not as unique geometry.
+Build the track as a kit, not as unique geometry. **This is more true for a city than it was
+for a canyon** — urban geometry is inherently modular, and a city built as a kit is
+convincing in a way that a canyon built as a kit is not.
 
-### 3.1 Terrain and rock
-- **Landscape** for the base ground plane and broad elevation
-- **Megascans cliff/rock assemblies** for the canyon walls — Nanite, no LODs needed, place as large hero pieces plus mid and small scatter
-- Rock material: **triplanar projection** with a large-scale detail normal so tiling is invisible at close range
-- Colour variation via a vertex-painted or world-position-driven tint mask — uniform rock colour is the fastest way to look like an asset pack
+The city also has a genuine advantage over the canyon at equal effort: **it occludes
+itself.** Buildings block sightlines, which caps how much of the scene is ever visible at
+once. An open canyon draws everything to the horizon. Expect the draw-call and Lumen
+picture to be *better* here than v1.0 assumed, and the shadow picture to be much better —
+see §7.
 
-### 3.2 Road
-- **Spline mesh road** from `AMidanTrackSpline` (already in the build spec)
-- Base asphalt material: Megascans road scan, 2–4m tiling, with a large-scale macro variation mask breaking up repetition
-- **Crack and patch decals** — a library of 8–12 decals scattered along the spline. This is what sells realism and it is nearly free
-- **Road markings as decals**, never as texture in the base material. Double centre line, edge lines, and worn variants. Decals let you author the line pattern independently of road geometry
-- Roughness variation is critical: uniform-roughness asphalt reads as plastic. Use a breakup mask so specular highlights pool unevenly — this creates the wet-looking sheen in the reference without any actual wetness
+### 3.1 Buildings and the urban canyon
 
-### 3.3 Furniture
-- Guardrail: one modular mesh + post, instanced along a spline
-- Sparse desert scrub via **PCG**, with a distance-from-road-spline exclusion mask so nothing grows on the tarmac
-- Distance markers, occasional signage (original, no real logos)
-- Keep total unique mesh count low. Repetition is fine at speed; unique geometry is not worth the time
+- **Modular facade kit** — a small set of storey-height panels (glass curtain wall, brick,
+  concrete, shuttered shopfront) that tile vertically and horizontally. Nanite. Six to eight
+  panel types assemble into an entire street.
+- **Greeble on the upper storeys only.** Air-conditioning units, pipework, fire escapes,
+  roof furniture. Nobody at 200 km/h looks above the third floor, so the detail budget
+  belongs at street level where the camera actually is.
+- **Ground floor gets the attention.** Shopfronts, awnings, doorways, railings, bollards,
+  street-level clutter. This is the band the camera sees for the whole race.
+- **Building height framing the road is the composition tool** the canyon walls used to be.
+  Tall and close for a tunnel-like sprint section; lower and set back where the track opens
+  into a plaza.
+- **Interiors are a cheat.** Do not model them. A lit interior card behind the glass —
+  emissive texture, parallax offset — reads correctly at speed and costs nothing.
 
-### 3.4 Composition rule taken from the reference
-**The road curves out of frame toward the light.** Design at least three points on your circuit where a corner exit points the camera at the sun with a canyon gap framing it. Those are your screenshot and trailer moments, and they should be deliberate, not discovered.
+### 3.2 Signage — the largest single art investment in v2.0
+
+Signage is doing the lighting job the sun used to do (§2.2), which makes it a lighting
+deliverable, not decoration.
+
+- **A library of 15–25 sign meshes**: wall-mounted boxes, projecting blades, vertical tube
+  lettering, large screen panels, scaffold-mounted billboards.
+- **One master emissive material** with instance parameters for hue, intensity, flicker rate
+  and animated-scroll speed. Twenty-five signs from one material keeps the permutation count
+  inside the §7 master-material limit.
+- **Animate a few, not most.** Two or three flickering or scrolling signs read as a living
+  city. Twenty read as a broken renderer.
+- **Large screen panels** on two or three hero buildings, playing an original looping
+  texture. This is the Times-Square read from the reference, and it is one material and one
+  mesh.
+- **Every wordmark is invented.** No real brand, logo, or recognisable typography treatment.
+  §0 governs signage exactly as it governs cars — a real storefront logo is the same
+  category of liability as a real badge.
+
+### 3.3 Road
+
+Mostly carried from v1.0, with wetness promoted from a fake to a real system (§2.3).
+
+- **Spline mesh road** from `AMidanTrackSpline`.
+- Base asphalt: scanned road material, 2–4 m tiling, with a large-scale macro variation mask
+  breaking up repetition.
+- **Crack and patch decals** — 8–12 scattered along the spline. Nearly free, and they read
+  strongly at night because wet cracks catch light differently from wet asphalt.
+- **Road markings as decals**, never baked into the base material — so the line pattern is
+  authored independently of road geometry.
+- **Wetness mask** driving roughness variation and puddle placement. Per §2.3 this is the
+  system the whole look rests on, not a texture detail.
+- **Manhole covers, drain grates, tram or service rails, painted crossings** as decals and
+  small meshes. Urban road furniture is what distinguishes a city street from a grey ribbon,
+  and it is all decals.
+- **Reflective road markings** — wet white paint under neon is one of the strongest images
+  available here, and it is free once the wetness mask exists.
+
+### 3.4 Furniture and scatter
+
+- **Barriers**: concrete blocks, water-filled barriers, and steel armco, instanced along a
+  spline. A street circuit is *defined* by its barriers, and they double as the light-blocking
+  geometry that makes neon pool.
+- **Street furniture**: lamp posts, traffic lights, bus shelters, benches, bins, phone boxes,
+  news stands. One instanced set placed along splines.
+- **Overhead structure**: gantries, pedestrian bridges, hanging cables, banner lines across
+  the street. These are the strongest framing devices in the whole kit — a gantry silhouetted
+  against a lit sign is a screenshot on its own.
+- **PCG** for street-level scatter — litter, leaves, small debris against kerbs — with a
+  distance-from-spline exclusion mask so nothing spawns on the racing surface. PCG's role
+  changes from desert scrub to urban clutter; the exclusion-mask technique is identical.
+- **Parked vehicles** as static background meshes. Original designs only, and they can be
+  much lower detail than the hero cars. A street with no parked cars reads as a set.
+
+### 3.5 Composition rule, restated for the city
+
+v1.0's rule was *the road curves out of frame toward the light*. The city version:
+
+**Design at least three points on the circuit where a corner exit frames a dominant lit
+structure** — a hero sign, a screen-panel building, a lit gantry — with the road's wet
+surface reflecting it back toward the camera. Those are the screenshot and trailer moments,
+and they should be placed deliberately at the layout stage, not discovered afterwards.
+
+Two further city-specific rules:
+
+- **Vary the width.** A street circuit that is one width throughout feels like a corridor.
+  Pinch it to barely two cars wide somewhere, and open it into a plaza somewhere else.
+- **Put one elevation change in.** An underpass or a bridge crossing gives you a section
+  with completely different lighting — darkness with hard-edged pools of light — for almost
+  no extra art. It is the cheapest variety in the whole kit.
 
 ---
 
@@ -175,25 +339,93 @@ Configure as a post-process volume, unbound, with these deviations from default.
 
 The reference frame is expensive. Here is what to hold and what to cut.
 
-### 7.1 Revised budget — 1080p/60 primary
-| Line | Budget (ms) |
-|---|---|
-| Total frame | 16.6 |
-| GPU total | ≤ 15.0 |
-| — Base pass (Nanite) | ≤ 3.0 |
-| — Lumen GI + reflections | ≤ 3.5 |
-| — Virtual Shadow Maps | ≤ 2.5 |
-| — Volumetric fog + clouds | ≤ 1.5 |
-| — Post + TSR | ≤ 2.5 |
-| — Translucency/particles | ≤ 1.0 |
+### 7.1 Revised budget — 1080p/60 primary · v2.0 re-allocation
 
-### 7.2 The three costs that will bite
-1. **VSM page pool with a low-angle directional light.** Long shadows across an open canyon is precisely the worst case. Clamp `r.Shadow.Virtual.ResolutionLodBiasDirectional` and measure. If it exceeds 2.5ms, raise the bias before you cut anything else.
-2. **Volumetric clouds.** Beautiful, and often 2ms+. Measure them alone. If they cost more than 1.0ms, swap to a cloud texture on the sky dome — at 250km/h nobody is studying cloud detail.
-3. **Lumen in a wide-open environment.** Use **software tracing**, clamp max trace distance to what the canyon actually needs, and lean on the sky light for distant fill.
+The pivot to night is not uniformly more expensive. It **removes v1.0's single largest
+risk** — a −3° to −6° directional light casting shadows across open terrain — and spends
+the saving on reflections, which is where the neon look actually lives.
+
+| Line | v1.0 (canyon, golden hour) | **v2.0 (neon city)** | Δ |
+|---|---|---|---|
+| Total frame | 16.6 | **16.6** | — |
+| GPU total | ≤ 15.0 | **≤ 15.0** | — |
+| — Base pass (Nanite) | ≤ 3.0 | **≤ 3.0** | — |
+| — Lumen GI + reflections | ≤ 3.5 | **≤ 4.0** | +0.5 |
+| — Virtual Shadow Maps | ≤ 2.5 | **≤ 1.5** | **−1.0** |
+| — Volumetric fog (clouds cut) | ≤ 1.5 | **≤ 1.0** | −0.5 |
+| — Local lights + emissive | *(absent)* | **≤ 0.75** | +0.75 |
+| — Post + TSR | ≤ 2.5 | **≤ 2.5** | — |
+| — Translucency / particles / rain | ≤ 1.0 | **≤ 1.25** | +0.25 |
+
+Sub-lines sum to **14.0 ms**, preserving the **1.0 ms unallocated contingency** v1.0 held.
+The re-allocation is net zero by construction — the VSM saving funds everything else.
+
+**Why each line moved:**
+
+- **VSM −1.0.** Deep Night has the directional light *off* and Night has it at moonlight
+  intensity. The catastrophic case v1.0 warned about does not exist in the hero preset. Local
+  shadow casters from a handful of rect lights are far cheaper than a full directional
+  cascade across open terrain.
+- **Lumen +0.5.** Now the hero cost. Wet-road reflections plus emissive signage as an
+  indirect source is precisely what makes the look, so it gets the budget. The city's
+  self-occlusion partly offsets this — a street has far shorter sightlines than an open
+  canyon, so trace distances are shorter.
+- **Volumetric −0.5, clouds cut entirely.** At night there is no cloud detail to see. Fog
+  stays and stays important — it is what makes neon bloom through haze — but 1.0 ms is
+  enough for fog alone.
+- **Local lights + emissive, new at 0.75.** Rect lights on the two or three hero signs, plus
+  the Lumen scene-update cost of many emissive surfaces. This was zero in v1.0 because the
+  canyon had one light source.
+- **Translucency +0.25.** Rain particles and wheel spray. Modest because the screen-space
+  droplet layer in post does most of the rain sensation, and it is cheaper.
+
+**Hold the budget at the worst preset, per line.** Day is now the VSM worst case because it
+is the only preset with a real sun; Deep Night is the worst case for Lumen, translucency and
+local lights. A budget that passes on Deep Night and fails on Day has not passed.
+
+### 7.2 The four costs that will bite
+
+Reordered for v2.0. The old number-one risk is gone; these are the new ones.
+
+1. **Lumen reflections on wet asphalt.** A low-roughness surface covering the entire play
+   area is the worst possible input for a reflection system. Keep **software tracing**, clamp
+   max trace distance to the street width rather than leaving it at default, and if it will
+   not fit, reduce reflection *quality* before reducing wetness — a lower-quality reflection
+   on a wet road still reads as wet, but a dry road does not read at all.
+2. **Emissive count and Lumen scene update.** Every emissive surface is a potential indirect
+   source. Many small signs cost more than a few large ones for the same visual result.
+   Consolidate: one large sign beats six small ones, both artistically and in the profile.
+3. **Shadow-casting local lights.** Each rect light that casts is a real cost. §2.2 limits
+   these to hero signs deliberately. If the count creeps past four or five, this line will
+   blow before any other.
+4. **Rain particle overdraw.** Rain is translucent geometry filling the screen — the classic
+   overdraw case. Measure it alone. Prefer fewer, larger, better-textured streak particles
+   over many thin ones, and lean on the post-process droplet layer.
+
+**Plus a schedule cost, not a frame cost:** three presets means the master prompt's §7.3 PSO
+collection playthrough runs three times and the shipped cache is the union of all three.
+Skipping one ships a build that hitches the first time a player selects it.
 
 ### 7.3 What to cut first if you are over budget
-In order: volumetric clouds → Lumen reflection quality → VSM resolution → screen percentage (TSR does the rest) → foliage density. **Never cut the film grain, the exposure clamp, or the motion blur** — those are feel, not fidelity, and cutting them costs you more than the frame time saves.
+
+Revised order for v2.0:
+
+1. Volumetric clouds — already effectively cut at night; remove entirely
+2. **Rain particle density** — the post droplet layer carries the effect
+3. Lumen reflection *quality* (never wetness itself — see §7.2.1)
+4. **Number of shadow-casting rect lights**
+5. VSM resolution
+6. Screen percentage — TSR absorbs a surprising amount
+7. Street-level PCG scatter density
+
+**Never cut the film grain, the exposure clamp, or the motion blur.** Those are feel, not
+fidelity, and cutting them costs more than the frame time returns. Film grain matters *more*
+in v2.0 than v1.0: night scenes have large smooth dark gradients, which band worse than a
+bright sky does.
+
+**Also never cut the wet-road roughness variation.** It is a material, not a render pass —
+it costs essentially nothing and it is the entire look. There is no version of this art
+direction with a uniform-roughness road.
 
 ### 7.4 Mac-specific
 Verify current Metal feature parity for Nanite, Lumen, and VSM against Epic's platform documentation before locking §2 and §7 — this moves between engine releases and my information may be behind. If any path is weaker than expected, choose the cheaper option *from the start* rather than after tuning.
