@@ -15,10 +15,12 @@
 // project's one sanctioned place for a Blueprint to carry asset/class
 // references without becoming gameplay logic.
 //
-// Phase 6 caveat: opponent pawns are possessed by a plain AAIController here
-// because AMidanOpponentController does not exist until Phase 6. They will
-// sit still on the grid — correct and expected for this phase's gate, which
-// exercises grid population and the state machine, not AI driving.
+// OpponentControllerClass defaults to plain AAIController but is intended to
+// be set to AMidanOpponentController (MidanAI, Phase 6) on the Blueprint
+// subclass — a TSubclassOf<AAIController> needs only AIModule (an engine
+// module MidanRace already links for this exact purpose, see A32), so this
+// class can drive AMidanOpponentController-possessed opponents without
+// MidanRace depending on MidanAI, which the module graph forbids.
 
 #pragma once
 
@@ -26,6 +28,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "MidanRaceGameMode.generated.h"
 
+class AAIController;
 class AMidanCheckpoint;
 class AMidanGridSpline;
 class UMidanRaceRulesDataAsset;
@@ -53,6 +56,12 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Midan|Race")
 	TArray<TSoftClassPtr<APawn>> OpponentVehicleClasses;
+
+	/** Controller class opponents are possessed with. Defaults to plain
+	 *  AAIController; set to AMidanOpponentController on the Blueprint
+	 *  subclass once MidanAI is in the project. See the class comment. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Midan|Race")
+	TSubclassOf<AAIController> OpponentControllerClass;
 
 	//~ AGameModeBase
 	virtual void BeginPlay() override;

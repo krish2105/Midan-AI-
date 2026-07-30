@@ -21,6 +21,7 @@ AMidanRaceGameMode::AMidanRaceGameMode()
 
 	GameStateClass = AMidanRaceGameState::StaticClass();
 	PlayerStateClass = AMidanRacePlayerState::StaticClass();
+	OpponentControllerClass = AAIController::StaticClass();
 }
 
 void AMidanRaceGameMode::BeginPlay()
@@ -147,12 +148,14 @@ void AMidanRaceGameMode::SpawnOpponents()
 			continue;
 		}
 
-		// Plain AAIController, not AMidanOpponentController — that class does
-		// not exist until Phase 6. See the class comment. bWantsPlayerState
-		// gives this controller an AMidanRacePlayerState via
-		// PlayerStateClass, which is how it enters PlayerArray for position
-		// and results tracking identically to the human player.
-		AAIController* AIController = GetWorld()->SpawnActor<AAIController>(AAIController::StaticClass(), Opponent->GetActorTransform());
+		// OpponentControllerClass defaults to plain AAIController and is
+		// intended to be set to AMidanOpponentController (MidanAI) on the
+		// Blueprint subclass — see the class comment. bWantsPlayerState gives
+		// this controller an AMidanRacePlayerState via PlayerStateClass,
+		// which is how it enters PlayerArray for position and results
+		// tracking identically to the human player.
+		const TSubclassOf<AAIController> ControllerClass = OpponentControllerClass ? OpponentControllerClass : AAIController::StaticClass();
+		AAIController* AIController = GetWorld()->SpawnActor<AAIController>(ControllerClass, Opponent->GetActorTransform());
 		if (AIController)
 		{
 			AIController->bWantsPlayerState = true;

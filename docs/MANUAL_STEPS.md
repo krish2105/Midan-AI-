@@ -543,11 +543,114 @@ gate is not "the code compiles", it's these specific rejection cases proven.
   ::SetStartAndEnd`, `bWantsPlayerState` on `AAIController`) is a best-effort signature from
   training knowledge, not a verified 5.8 header. Expect a first-compile error list, same as
   every prior phase.
-- **The 7 AI opponents are stationary.** `AMidanRaceGameMode` possesses them with a plain
-  `AAIController` (docs/ASSUMPTIONS.md A32) because `AMidanOpponentController` is a Phase 6
-  deliverable. `AMidanLapTimingSubsystem::HandleRacerFinished` only ends the race on the
-  human player finishing for exactly this reason — waiting for all 8 would deadlock.
-- **Off-track detection is a 10Hz poll, not a push** (docs/ASSUMPTIONS.md A31). Verify the
+- **The 7 AI opponents are stationary until §6.4 is done.** `AMidanRaceGameMode` possesses
+  them with `OpponentControllerClass`, which defaults to plain `AAIController` — set it to
+  `AMidanOpponentController` on the GameMode Blueprint (§6.4) once `MidanAI` is in the
+  project, or opponents sit still. `AMidanLapTimingSubsystem::HandleRacerFinished` only ends
+  the race on the human player finishing regardless — waiting for all 8 would deadlock if
+  even one opponent never gets an AI controller assigned.
+- **Off-track detection is a 10Hz poll, not a push** (docs/ASSUMPTIONS.md A32). Verify the
   feel of this once drivable — a wheel that clips gravel for less than one poll interval
   could theoretically be missed between polls, though at 0.1s default against a 1.5s grace
   window this is far inside the margin.
+
+---
+
+## Phase 6 — AI opponents
+
+Code and math are done. What remains is authoring the racing line and difficulty tiers,
+and wiring `AMidanRaceGameMode` to actually spawn `AMidanOpponentController`. Nothing here
+has been compiled or run; see §0.1.
+
+### 6.1 Author the difficulty tiers
+
+One `UMidanAIDifficultyDataAsset` per tier, e.g. `Content/Midan/AI/DA_AI_Easy`,
+`DA_AI_Medium`, `DA_AI_Hard`. Start from the class defaults (already a reasonable Medium
+tier) and vary the five hard-rule levers plus the mistake magnitude between tiers:
+
+| Field | Easy | Medium | Hard |
+|---|---|---|---|
+| `TyreFrictionMultiplier` | 0.75 | 0.90 | 1.0 |
+| `TargetSpeedMultiplier` | 0.80 | 0.92 | 1.0 |
+| `MistakeProbability` | 0.35 | 0.15 | 0.03 |
+| `ReactionDelaySeconds` | 0.35 | 0.18 | 0.08 |
+| `Aggression` | 0.3 | 0.5 | 0.8 |
+
+These are starting points to tune by feel, same discipline as every other table in this
+file — not final values. Run the validator (§2.6 covers every `UMidanDataAsset` subclass
+automatically) after authoring each.
+
+### 6.2 Build the racing line
+
+1. Place one `AMidanRacingLineSpline` in the circuit map, tracing the fastest line through
+   every corner — NOT the road centreline `AMidanTrackSpline` already has. It should cut
+   apex-to-apex, crossing the track's own centreline repeatedly.
+2. Resize `Points` to exactly match the spline's key count (one `FRacingLinePoint` per
+   spline point — `MidanRacingLineToolLibrary` rejects a mismatch). Author each point's
+   `LateralOffsetMinCm`/`MaxCm` by hand: how far `UMidanOvertakeComponent` and
+   `UMidanAvoidanceComponent` may push a car off this line before it runs out of track or
+   crosses into a blind apex. Leave `ReferenceTargetSpeedKmh`/`bBrakingZone` at their
+   defaults — §6.3 generates them.
+
+### 6.3 Generate the reference speed profile
+
+```bash
+"<UE>/Engine/Binaries/Mac/UnrealEditor-Cmd" "$PWD/Midan.uproject" \
+    -run=pythonscript -script="$PWD/Tools/editor_python/generate_racing_line.py" \
+    -mu=1.0 -vmax=320 -decel=1400
+```
+
+`-mu=1.0` is deliberate — this generates the ONE shared reference profile every difficulty
+tier scales from at runtime (docs/ASSUMPTIONS.md A39), not a per-tier profile. Re-run after
+any edit to the racing line's geometry or `Points` count.
+
+### 6.4 Wire `AMidanRaceGameMode` to spawn `AMidanOpponentController`
+
+On the GameMode Blueprint from Phase 5 §5.4:
+
+1. Set `OpponentControllerClass` to a Blueprint subclass of `AMidanOpponentController` (or
+   the class directly, if no Blueprint-only customisation is needed).
+2. On that controller subclass (or per-instance, if opponents should vary), set
+   `Difficulty` to one of the three tiers from §6.1. Three opponents on Hard, two on
+   Medium, two on Easy is a reasonable starting spread for a 7-car field.
+
+Without this step opponents sit still on the grid — `OpponentControllerClass` defaults to
+plain `AAIController`, which never calls `ApplyInput` (docs/ASSUMPTIONS.md A38).
+
+### 6.5 Verify the collision-channel assumption
+
+`UMidanAvoidanceComponent` and `UMidanOvertakeComponent` both trace against `ECC_Pawn`
+(docs/ASSUMPTIONS.md A40). Confirm vehicle bodies and static track geometry (walls,
+barriers) both block on that channel once the collision profiles from Phase 3 are in place;
+if not, update the channel constant in both components together.
+
+### 6.6 Run the gate Automation Specs
+
+```bash
+"<UE>/Engine/Binaries/Mac/UnrealEditor-Cmd" "$PWD/Midan.uproject" \
+    -run=Automation -test="Midan.AI" -log
+```
+
+Expect eight specs: three in `Midan.AI.SpeedProfile.*` (cornering limit shape, backward
+braking pass, open-sequence non-wrap) and five in `Midan.AI.PID.*` (setpoint convergence,
+convergence from an overshot start, anti-windup clamping, Reset clearing state). The
+`SpeedProfile` specs print the full generated table for the synthetic corner sequence via
+`AddInfo` — paste it alongside the pass/fail output, per the gate's "print the generated
+speed profile" requirement.
+
+### 6.7 Known gaps at this gate
+
+- **Nothing is compiled.** `ECC_Pawn` (A40), `bWantsPlayerState`/`InitPlayerState` ordering,
+  and every `UWorld::SweepSingleByChannel`/`OverlapMultiByChannel` call are best-effort
+  signatures, not verified against 5.8 headers.
+- **No Behaviour Tree, by design** (docs/ARCHITECTURE.md §3.4) — do not "fix" this by
+  adding one. Racing is a continuous control problem; a BT would be solving the wrong shape
+  of problem.
+- **Overtake and avoidance have never been driven.** The gap/closing-speed thresholds in
+  §6.1's starting table and the lane-offset magnitudes in code are first drafts. Budget
+  tuning time once the AI can actually be watched racing, the same as every feel system in
+  this project.
+- **Mistake model timing is unverified against a real approach.** `MistakeDurationSeconds`
+  and the overshoot/offset magnitudes in §6.1 assume a corner takes at least that long to
+  drive through; a very short corner on the eventual track layout may need per-corner
+  tuning beyond the flat per-tier values this phase ships.

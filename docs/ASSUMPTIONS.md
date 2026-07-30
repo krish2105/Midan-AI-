@@ -398,7 +398,24 @@ impact is a missing sound, which is a bug rather than a taste).
 `FullScaleImpactImpulse` is deliberately SHARED by camera, audio and haptics. Three channels
 disagreeing about how big the same collision was is worse than any one of them missing.
 
-### A31 — Off-track detection is polled, not pushed · Phase 5
+### A31 — Continuous force-feedback loops are declared but never spawned · Phase 4
+
+`UVehicleHapticsComponent` declares `IdleRumble`, `SurfaceRumble` and `SlipRumble` and
+modulates their intensity every frame, but never creates them.
+
+**Reason:** the mechanism for modulating a LOOPING force feedback effect's amplitude at
+runtime is the least certain API in the phase, and no engine is installed to check it
+against. Spawning them against a guessed API would produce three silent components and a
+false impression that the channel works.
+
+Transient impacts and kerb strikes DO work — they go through `ClientPlayForceFeedback`,
+which is a stable API.
+
+**To close:** confirm the 5.8 looping-effect API, then spawn the three loops in
+`InitialiseFromAsset`. The channel design does not change. Recorded in
+`docs/MANUAL_STEPS.md` §4.8. Related: A27.
+
+### A32 — Off-track detection is polled, not pushed · Phase 5
 
 `docs/ARCHITECTURE.md` §2.3 lists `UMidanLapTimingSubsystem`'s cadence as "checkpoint
 overlap events + off-track grace timer" — event-driven, not a per-frame `Tick`. But nothing
@@ -419,7 +436,7 @@ substep transition. Acceptable against a 1.5s grace period; would need reconside
 the grace period is ever tuned below roughly 5× the poll interval — the validator warns
 if it drops below 3×.
 
-### A32 — `AMidanRaceGameMode` links `AIModule` for a placeholder `AAIController` · Phase 5
+### A33 — `AMidanRaceGameMode` links `AIModule` for a placeholder `AAIController` · Phase 5
 
 `AMidanOpponentController : AAIController` does not exist until Phase 6, but Phase 5's gate
 needs a populated 8-car grid to exercise position calculation and the state machine. Master
@@ -433,7 +450,7 @@ not touch the graph in docs/ARCHITECTURE.md §2.1, the same reasoning already ap
 `MidanAI`'s own `AIModule` link. Phase 6 replaces the controller class; this dependency
 stays, since `AMidanOpponentController` itself derives from `AAIController`.
 
-### A33 — Checkpoints are filtered by `IMidanVehicleInterface`, not by class · Phase 5
+### A34 — Checkpoints are filtered by `IMidanVehicleInterface`, not by class · Phase 5
 
 `AMidanCheckpoint`'s overlap trigger fires for anything physically inside its box. Filtering
 by `Cast<AMidanVehiclePawn>` would pull `MidanVehicle` into `MidanRace`'s dependency list —
@@ -441,7 +458,7 @@ forbidden by the module graph. Filtering by `AActor::Implements<UMidanVehicleInt
 instead costs one virtual dispatch and needs nothing beyond `MidanCore`, which `MidanRace`
 already depends on.
 
-### A34 — Respawn snaps to the last valid checkpoint, not the nearest track point · Phase 5
+### A35 — Respawn snaps to the last valid checkpoint, not the nearest track point · Phase 5
 
 `docs/ARCHITECTURE.md` §3.3 specifies "rewind to last valid checkpoint" for
 `MidanRespawnComponent`. The nearest point on the centreline to wherever a stuck racer
@@ -452,22 +469,93 @@ accepted into the sequence — specifically so the respawn component has a known
 to read, rather than reconstructing one from the racer's current (possibly the problem)
 position.
 
-### A31 — Continuous force-feedback loops are declared but never spawned · Phase 4
+### A36 — Overtake and avoidance detect other cars by world query, not by race data · Phase 6
 
-`UVehicleHapticsComponent` declares `IdleRumble`, `SurfaceRumble` and `SlipRumble` and
-modulates their intensity every frame, but never creates them.
+`UMidanOvertakeComponent` and `UMidanAvoidanceComponent` both need to know "is there a car
+near me and which way is it going" — but `MidanAI` depends on `MidanCore` and `MidanVehicle`
+only, not `MidanRace`, so there is no position/lap registry to ask.
 
-**Reason:** the mechanism for modulating a LOOPING force feedback effect's amplitude at
-runtime is the least certain API in the phase, and no engine is installed to check it
-against. Spawning them against a guessed API would produce three silent components and a
-false impression that the channel works.
+**Assumed:** both use direct world sphere-overlap/sweep queries (`UWorld::OverlapMultiByChannel`
+/ `SweepSingleByChannel`) and filter hits by `AActor::Implements<UMidanVehicleInterface>()` —
+the same interface-filtering pattern `AMidanCheckpoint` uses in `MidanRace` (A34). This
+answers the proximity question with zero new dependencies: a physical trace does not care
+which module owns lap timing.
 
-Transient impacts and kerb strikes DO work — they go through `ClientPlayForceFeedback`,
-which is a stable API.
+**Cost:** an AI's avoidance/overtake logic cannot distinguish "car" from "any other actor
+implementing the interface", which is exactly right — it should not need a special case for
+who's driving. It also cannot read the OTHER car's intent (is it about to lane change too);
+that is out of scope for Phase 6 and would need a shared coordination channel this phase does
+not build.
 
-**To close:** confirm the 5.8 looping-effect API, then spawn the three loops in
-`InitialiseFromAsset`. The channel design does not change. Recorded in
-`docs/MANUAL_STEPS.md` §4.8. Related: A27.
+### A37 — Rubber-band gap duplicates one line of MidanRace's math rather than depending on it · Phase 6
+
+`UMidanRubberBandComponent::ComputeGapToPlayerSeconds` needs each racer's total race
+progress (lap count × track length + arc length) to compare against the player's. That
+formula already exists as `MidanRacePosition::ComputeTotalProgress` in `MidanRace`.
+
+**Assumed:** duplicated inline as a one-line expression rather than depending on `MidanRace`
+for it. A single arithmetic line is not worth a module edge that would need justifying at
+every future architecture review; `IMidanTrackInterface` and `IMidanRaceStateInterface`
+(both `MidanCore`) already supply every input the formula needs.
+
+### A38 — `AMidanRaceGameMode` gains `OpponentControllerClass` to adopt `AMidanOpponentController` · Phase 6
+
+Phase 5 possessed opponents with a hardcoded `AAIController::StaticClass()` and left a class
+comment promising Phase 6 would replace it. `MidanRace` cannot reference
+`AMidanOpponentController` by type without a `MidanRace → MidanAI` dependency edge, which is
+not in the approved graph and is a stop condition to add.
+
+**Assumed:** `AMidanRaceGameMode` gained one property, `TSubclassOf<AAIController>
+OpponentControllerClass`, defaulting to `AAIController::StaticClass()` in the constructor.
+`TSubclassOf<AAIController>` only needs `AIModule` (already a private dependency of
+`MidanRace`, A33) — the *value* `AMidanOpponentController` is assigned in the GameMode
+Blueprint, which is content configuration, not a new compiled dependency. This is the same
+pattern as `DefaultPawnClass` and `OpponentVehicleClasses` already use for exactly this
+reason.
+
+### A39 — One shared reference speed profile per racing line, not one per difficulty tier · Phase 6
+
+`docs/ARCHITECTURE.md` §3.4 lists `TyreFrictionMultiplier` as a difficulty field, and the
+speed profile formula (`v = sqrt(mu*g/|curvature|)`) takes `mu` as an input — which could be
+read as "regenerate the profile per difficulty tier with that tier's own `mu`".
+
+**Assumed:** the racing line stores ONE reference profile, generated once at a reference
+`mu` of 1.0. Each `AMidanOpponentController` instead applies `TargetSpeedMultiplier`
+uniformly and `sqrt(TyreFrictionMultiplier)` specifically where
+`FRacingLinePoint::bBrakingZone` is true, at runtime, per tick — two multiplies, not a
+regeneration pass. `v ∝ sqrt(mu)` is why the multiplier is square-rooted rather than applied
+flat, keeping the runtime approximation dimensionally consistent with what generated the
+number it's scaling.
+
+**Cost:** this is an approximation, not a re-derivation — a tier's actual achievable
+cornering speed is not literally recomputed from its own `mu` against the corner's own
+curvature, only scaled from the reference. Acceptable for a difficulty dial; would need
+revisiting if a future tier's `mu` needs to be dramatically different from 1.0 (the
+`ValidateMidanData` clamp keeps it in [0.3, 1.2] for exactly this reason).
+
+### A40 — Vehicle-avoidance and overtake traces assume `ECC_Pawn` · Phase 6
+
+`UMidanAvoidanceComponent` and `UMidanOvertakeComponent` both trace/sweep against
+`ECC_Pawn`, assuming vehicle bodies and static track geometry both block on it.
+**Unverified, no engine installed** — marked `API VERIFY` at each call site, same status as
+every Chaos-adjacent assumption since Phase 3 (docs/ASSUMPTIONS.md A21, A27). Confirm
+against the project's actual collision profile setup once the editor is available; if
+vehicles use a dedicated `Vehicle` object channel instead, both components need the channel
+constant updated together so they stay consistent with each other.
+
+### A41 — Reaction delay is a fixed-capacity input ring buffer, not a slower Tick · Phase 6
+
+`UMidanAIDifficultyDataAsset::ReactionDelaySeconds` needed a mechanism that delays the
+AI's OUTPUT without delaying its READ of current state — a human driver's reaction time is a
+lag between perceiving and acting, not a slower perception rate.
+
+**Assumed:** `AMidanOpponentController` computes a fresh input every Tick (fresh
+perception) and pushes it into a 256-sample ring buffer of `{timestamp, input}` pairs; each
+Tick applies the newest buffered sample old enough to satisfy `ReactionDelaySeconds`. Fixed-
+size C array, not `TArray` — zero allocation, same reasoning as
+`MidanVehicleConstants::NumWheels` and the telemetry ring buffer. 256 samples covers up to a
+1-second delay (the field's clamped maximum) at up to 256fps, which is headroom enough for
+any realistic frame rate this project targets.
 
 ### A16 — Vehicle names chosen · RESOLVED, one check outstanding
 

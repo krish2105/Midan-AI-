@@ -15,7 +15,7 @@ document is the file manifest and the order of work.
 | 3 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Vehicle core |
 | 4 | **files written · gate BLOCKED on engine install** | Opus 5 | Feel layer |
 | 5 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Track & race systems |
-| 6 | not started | Sonnet 5 | AI opponents |
+| 6 | **files written · gate BLOCKED on engine install** | Sonnet 5 | AI opponents |
 | 7 | not started | Sonnet 5 | Race flow & UI |
 | 8 | not started | Opus 5 | Rendering & performance |
 | 9 | not started | Sonnet 5 | Telemetry & analysis |
@@ -229,7 +229,7 @@ corner-cutting and reverse-direction rejection cases. Stop.
 - `UMidanRaceRulesDataAsset` gained three fields beyond the plan's six:
   `OffTrackWheelThreshold`, `OffTrackPollIntervalSeconds` (both needed to make
   the off-track grace timer, which is polled rather than event-pushed —
-  see A31 below — itself data-driven) and `ResultsDelaySeconds` (Race.State
+  see A32 below — itself data-driven) and `ResultsDelaySeconds` (Race.State
   .Finished → Results pacing, never specified upstream but a designer-tunable
   value under CLAUDE.md regardless of size).
 - `MidanCheckpointGeneratorLibrary.cpp` lives in `Private/`, not `Public/` as
@@ -238,10 +238,10 @@ corner-cutting and reverse-direction rejection cases. Stop.
   editor-tools *header* needs to be reachable by UHT/reflection; the
   implementation stays private to the module like every other class here).
 - `AMidanRaceGameMode` links `AIModule` (engine module, not a project module —
-  see A32) to possess opponent pawns with a plain `AAIController` until
+  see A33) to possess opponent pawns with a plain `AAIController` until
   `AMidanOpponentController` exists at Phase 6.
 
-See docs/ASSUMPTIONS.md A31–A34 for the reasoning behind each.
+See docs/ASSUMPTIONS.md A32–A35 for the reasoning behind each.
 
 ---
 
@@ -275,6 +275,30 @@ The controller outputs **only** a normalised `FMidanVehicleInputState` fed throu
 
 **Gate:** print the generated speed profile for a synthetic corner sequence and the PID
 convergence test results. Stop.
+
+**Status: files written, gate BLOCKED on engine install** — same as Phases 1–5. Nothing
+below has been compiled or run.
+
+**Deviations from plan, recorded so they are not rediscovered:**
+
+- `AMidanRaceGameMode` (`MidanRace`) gained `OpponentControllerClass`
+  (`TSubclassOf<AAIController>`), fulfilling the placeholder comment left at Phase 5. This
+  lets a Blueprint subclass assign `AMidanOpponentController` without `MidanRace` gaining a
+  hard dependency on `MidanAI` — `TSubclassOf<AAIController>` only needs the `AIModule`
+  engine dependency `MidanRace` already has (docs/ASSUMPTIONS.md A33).
+- `UMidanAIDifficultyDataAsset` grew well beyond the plan's seven named fields — control-loop
+  gains (PID, steering response, lookahead), awareness timing/range for avoidance and
+  overtaking, and mistake magnitude. Same precedent as Phase 5's `UMidanRaceRulesDataAsset`:
+  every value a human would tune by feel belongs in the Data Asset, not a constant.
+- `UMidanOvertakeComponent` and `UMidanAvoidanceComponent` detect nearby vehicles through
+  world overlap/sweep queries filtered by `IMidanVehicleInterface`, never through `MidanRace`'s
+  position or lap data — `MidanAI` does not depend on `MidanRace` and a physical proximity
+  check answers "is there a car nearby" without needing to.
+- `UMidanRubberBandComponent`'s gap-to-player calculation duplicates
+  `MidanRacePosition::ComputeTotalProgress`'s one-line formula rather than depending on
+  `MidanRace` for it.
+
+See docs/ASSUMPTIONS.md A36–A41 for the reasoning behind each.
 
 ---
 
