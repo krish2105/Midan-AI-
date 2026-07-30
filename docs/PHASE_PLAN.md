@@ -14,7 +14,7 @@ document is the file manifest and the order of work.
 | 2 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Vehicle data architecture |
 | 3 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Vehicle core |
 | 4 | **files written · gate BLOCKED on engine install** | Opus 5 | Feel layer |
-| 5 | not started | Sonnet 5 | Track & race systems |
+| 5 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Track & race systems |
 | 6 | not started | Sonnet 5 | AI opponents |
 | 7 | not started | Sonnet 5 | Race flow & UI |
 | 8 | not started | Opus 5 | Rendering & performance |
@@ -220,6 +220,28 @@ Not trigger volumes.
 
 **Gate:** run the lap-validation Automation Specs. Print results, including the
 corner-cutting and reverse-direction rejection cases. Stop.
+
+**Status: files written, gate BLOCKED on engine install** (docs/MANUAL_STEPS.md
+§0.1) — same as Phases 1–4. Nothing below has been compiled or run.
+
+**Deviations from plan, recorded so they are not rediscovered:**
+
+- `UMidanRaceRulesDataAsset` gained three fields beyond the plan's six:
+  `OffTrackWheelThreshold`, `OffTrackPollIntervalSeconds` (both needed to make
+  the off-track grace timer, which is polled rather than event-pushed —
+  see A31 below — itself data-driven) and `ResultsDelaySeconds` (Race.State
+  .Finished → Results pacing, never specified upstream but a designer-tunable
+  value under CLAUDE.md regardless of size).
+- `MidanCheckpointGeneratorLibrary.cpp` lives in `Private/`, not `Public/` as
+  the file table above lists — same precedent as Phase 2's
+  `MidanDataValidators.h/.cpp` (docs/ASSUMPTIONS.md convention: only the
+  editor-tools *header* needs to be reachable by UHT/reflection; the
+  implementation stays private to the module like every other class here).
+- `AMidanRaceGameMode` links `AIModule` (engine module, not a project module —
+  see A32) to possess opponent pawns with a plain `AAIController` until
+  `AMidanOpponentController` exists at Phase 6.
+
+See docs/ASSUMPTIONS.md A31–A34 for the reasoning behind each.
 
 ---
 

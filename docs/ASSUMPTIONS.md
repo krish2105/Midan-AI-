@@ -398,6 +398,60 @@ impact is a missing sound, which is a bug rather than a taste).
 `FullScaleImpactImpulse` is deliberately SHARED by camera, audio and haptics. Three channels
 disagreeing about how big the same collision was is worse than any one of them missing.
 
+### A31 — Off-track detection is polled, not pushed · Phase 5
+
+`docs/ARCHITECTURE.md` §2.3 lists `UMidanLapTimingSubsystem`'s cadence as "checkpoint
+overlap events + off-track grace timer" — event-driven, not a per-frame `Tick`. But nothing
+in the master prompt or the architecture doc says who calls the subsystem when a wheel
+crosses onto gravel. `MidanVehicle` cannot push the event itself without depending on
+`MidanRace`, which the module graph forbids (docs/ARCHITECTURE.md §2.1).
+
+**Assumed:** `UMidanLapTimingSubsystem` polls every registered racer's
+`IMidanVehicleInterface::GetVehicleFrameState` on a repeating `FTimerHandle`, at
+`UMidanRaceRulesDataAsset::OffTrackPollIntervalSeconds` (default 0.1s, well under the
+1.5s default grace period). This is a timer, not a `Tick` — it satisfies §2.3 literally —
+and it keeps `MidanVehicle` and `MidanRace` decoupled: the subsystem reads through the same
+interface `MidanTelemetry` uses, rather than `MidanVehicle` gaining a second consumer to
+push to.
+
+**Cost:** off-track state can lag up to one poll interval (100ms) behind the actual
+substep transition. Acceptable against a 1.5s grace period; would need reconsidering if
+the grace period is ever tuned below roughly 5× the poll interval — the validator warns
+if it drops below 3×.
+
+### A32 — `AMidanRaceGameMode` links `AIModule` for a placeholder `AAIController` · Phase 5
+
+`AMidanOpponentController : AAIController` does not exist until Phase 6, but Phase 5's gate
+needs a populated 8-car grid to exercise position calculation and the state machine. Master
+prompt and `docs/ARCHITECTURE.md` §3.4 grant `AIModule` to `MidanAI` only.
+
+**Assumed:** `MidanRace` links `AIModule` as a **private** dependency, for the sole purpose
+of spawning a stock `AAIController` to possess opponent pawns (so they gain a
+`PlayerState` and enter `PlayerArray`, per the `bWantsPlayerState` mechanism `APlayerState`
+tracking relies on). This is an engine-module dependency, not a project-module one — it does
+not touch the graph in docs/ARCHITECTURE.md §2.1, the same reasoning already applied to
+`MidanAI`'s own `AIModule` link. Phase 6 replaces the controller class; this dependency
+stays, since `AMidanOpponentController` itself derives from `AAIController`.
+
+### A33 — Checkpoints are filtered by `IMidanVehicleInterface`, not by class · Phase 5
+
+`AMidanCheckpoint`'s overlap trigger fires for anything physically inside its box. Filtering
+by `Cast<AMidanVehiclePawn>` would pull `MidanVehicle` into `MidanRace`'s dependency list —
+forbidden by the module graph. Filtering by `AActor::Implements<UMidanVehicleInterface>()`
+instead costs one virtual dispatch and needs nothing beyond `MidanCore`, which `MidanRace`
+already depends on.
+
+### A34 — Respawn snaps to the last valid checkpoint, not the nearest track point · Phase 5
+
+`docs/ARCHITECTURE.md` §3.3 specifies "rewind to last valid checkpoint" for
+`MidanRespawnComponent`. The nearest point on the centreline to wherever a stuck racer
+currently sits was considered and rejected: it can be the same hazard the racer just hit
+(a wall apex, the inside of a hairpin a car has crashed into). `UMidanLapTimingSubsystem`
+now tracks `LastValidCheckpointArcLength` per racer — the arc length of the last checkpoint
+accepted into the sequence — specifically so the respawn component has a known-safe waypoint
+to read, rather than reconstructing one from the racer's current (possibly the problem)
+position.
+
 ### A31 — Continuous force-feedback loops are declared but never spawned · Phase 4
 
 `UVehicleHapticsComponent` declares `IdleRumble`, `SurfaceRumble` and `SlipRumble` and

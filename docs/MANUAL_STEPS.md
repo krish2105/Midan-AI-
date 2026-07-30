@@ -454,3 +454,100 @@ clearest cue the player has about which end is letting go — do not author it f
 - **Budget real time for the tuning itself.** Code delivers every system and every curve
   correctly wired; the result will still feel wrong until a human sits down and tunes it.
   Studios employ specialists for this.
+
+---
+
+## Phase 5 — Track & race systems
+
+Everything here is code plus one Data Asset. The circuit itself — the spline path, its
+sections, the road mesh, the grid, the checkpoints — is level content that only exists once
+the editor is open. Nothing in this phase has been compiled or run; see §0.1.
+
+### 5.1 Author `UMidanRaceRulesDataAsset`
+
+One instance, e.g. `Content/Midan/Race/DA_RaceRules`. Defaults are reasonable starting
+points (Phase plan A13): `LapCount` 3, `CountdownDurationSeconds` 3, `SectorCount` 3,
+`OffTrackGraceSeconds` 1.5, `OffTrackWheelThreshold` 2, `OffTrackPollIntervalSeconds` 0.1,
+`RespawnCooldownSeconds` 5, `PositionUpdateHz` 10, `ResultsDelaySeconds` 3. Run the
+validator (same command as §2.6, it covers every `UMidanDataAsset` subclass automatically).
+
+### 5.2 Build the track spline
+
+1. Place one `AMidanTrackSpline` in the circuit map. Draw the 3km loop with spline points;
+   `SetClosedLoop(true)` is already on by default.
+2. Author `Sections` — a handful of entries (start straight, each named corner, chicane),
+   each with `StartDistance`, `Width`, `BankingDegrees`, `MaterialIndex`. Click **Validate
+   Sections** (or call it from Python) to confirm they're sorted and start at 0.
+3. Set `RoadMesh` and `RoadMaterials`, then click **Rebuild Road Mesh**. Re-run any time
+   `Sections` changes — it does not rebuild automatically (deliberately: see the class
+   comment on why auto-rebuild-on-edit would fight a designer mid-change).
+4. **Verify the curvature sign convention** (docs/ASSUMPTIONS.md, `MidanTrackSpline.cpp`):
+   drive a known right-hand corner and confirm `GetCurvatureAtDistance` returns positive.
+   If it's inverted, flip the sign in `AMidanTrackSpline::GetCurvatureAtDistance` — this
+   feeds directly into Phase 6's `v_target = sqrt(mu*g/|curvature|)`, which is insensitive to
+   sign, but anything that reads sign later (banking-aware cornering, HUD corner arrows)
+   is not.
+
+### 5.3 Place the grid and generate checkpoints
+
+1. Place one `AMidanGridSpline` near the start/finish line, aligned with the start straight.
+   Leave `SlotCount` at 8 unless the field size changes.
+2. Run `Tools/editor_python/batch_setup_checkpoints.py` with the track map open:
+
+   ```bash
+   "<UE>/Engine/Binaries/Mac/UnrealEditor-Cmd" "$PWD/Midan.uproject" \
+       -run=pythonscript -script="$PWD/Tools/editor_python/batch_setup_checkpoints.py" \
+       -checkpoints=24 -sectors=3
+   ```
+
+   This destroys and regenerates every `AMidanCheckpoint` in the level — safe to re-run
+   after moving the spline or changing section widths. `SectorCount` must match
+   `UMidanRaceRulesDataAsset::SectorCount`.
+3. Spot-check 2–3 checkpoints in a hairpin: the trigger box should span the drivable width,
+   not the whole runoff.
+
+### 5.4 Configure `AMidanRaceGameMode`
+
+1. Create a Blueprint subclass of `AMidanRaceGameMode` (the project's one sanctioned use of
+   Blueprint for asset references, per `CLAUDE.md`).
+2. Set `DefaultPawnClass` (base `AGameModeBase` property) to the player's vehicle Blueprint.
+3. Set `RaceRulesAsset` to the Data Asset from §5.1.
+4. Set `OpponentVehicleClasses` — up to three entries, one per car from Phase 2/3. Fewer
+   than 7 slots is fine; the array cycles.
+5. Set this GameMode as the map's `GameMode Override` in World Settings, and set
+   `GameDefaultMap` / `EditorStartupMap` per §1.2 once this map is the circuit map.
+
+### 5.5 Author the Enhanced Input respawn binding
+
+`UMidanRespawnComponent` binds `RespawnAction` (`IA_Respawn`, authored in §1.3) itself —
+add the component to the player vehicle Blueprint and point both `RaceRules` and
+`RespawnAction` at their assets. No additional input wiring needed; the component checks
+`IsLocallyControlled` and no-ops on AI pawns.
+
+### 5.6 Run the lap-validation Automation Specs — the Phase 5 gate
+
+```bash
+"<UE>/Engine/Binaries/Mac/UnrealEditor-Cmd" "$PWD/Midan.uproject" \
+    -run=Automation -test="Midan.Race" -log
+```
+
+Expect nine specs: four in `Midan.Race.LapTiming.*` (sequential progress, corner-cutting
+rejection, reverse-direction rejection, off-track grace) and four in `Midan.Race.Position.*`
+(monotonic progress, ordering, tie-break, edge cases), one existing curve-utils spec
+carried from earlier phases is unaffected. Paste the full pass/fail output — this phase's
+gate is not "the code compiles", it's these specific rejection cases proven.
+
+### 5.7 Known gaps at this gate
+
+- **Nothing is compiled.** Every Chaos-adjacent and spline-mesh call (`USplineMeshComponent
+  ::SetStartAndEnd`, `bWantsPlayerState` on `AAIController`) is a best-effort signature from
+  training knowledge, not a verified 5.8 header. Expect a first-compile error list, same as
+  every prior phase.
+- **The 7 AI opponents are stationary.** `AMidanRaceGameMode` possesses them with a plain
+  `AAIController` (docs/ASSUMPTIONS.md A32) because `AMidanOpponentController` is a Phase 6
+  deliverable. `AMidanLapTimingSubsystem::HandleRacerFinished` only ends the race on the
+  human player finishing for exactly this reason — waiting for all 8 would deadlock.
+- **Off-track detection is a 10Hz poll, not a push** (docs/ASSUMPTIONS.md A31). Verify the
+  feel of this once drivable — a wheel that clips gravel for less than one poll interval
+  could theoretically be missed between polls, though at 0.1s default against a 1.5s grace
+  window this is far inside the margin.
