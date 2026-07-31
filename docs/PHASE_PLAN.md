@@ -18,7 +18,7 @@ document is the file manifest and the order of work.
 | 6 | **files written · gate BLOCKED on engine install** | Sonnet 5 | AI opponents |
 | 7 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Race flow & UI |
 | 8 | not started | Opus 5 | Rendering & performance |
-| 9 | not started | Sonnet 5 | Telemetry & analysis |
+| 9 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Telemetry & analysis |
 | 10 | not started | Sonnet 5 → Haiku 4.5 | Build, CI & ship |
 
 ---
@@ -422,6 +422,42 @@ Reporting discipline: every chart carries its sample count, laps are only compar
 matched conditions, and no metric appears without its denominator.
 
 **Gate:** capture one lap, print the report, verify zero game-thread I/O. Stop.
+
+**Status: files written, gate BLOCKED on engine install** — same as Phases 1–7. Nothing
+below has been compiled or run.
+
+**Executed out of numeric order.** `MidanHotLapReplay` (Phase 8) needs `UMidanGhostPlayer`
+to exist to drive a deterministic replay for profiling — a forward dependency the plan's
+phase order doesn't resolve. Rather than stub Phase 8's ghost dependency, this session built
+Phase 9 (Telemetry) before Phase 8 (Rendering & performance), then Phase 8 afterward with a
+working `UMidanGhostPlayer` to build on. Same category of resolution as A20/A26 (gameplay
+tags and Core interfaces pulled forward for the same reason): the dependency existed in the
+plan regardless of which session wrote the code first.
+
+**Deviations from plan, recorded so they are not rediscovered:**
+
+- `MidanTelemetryFrame.h` gained a `.cpp` — `BuildFromSource` and the `operator<<`
+  serialiser needed a translation unit, and the plan's header-only listing did not
+  anticipate that (every other Phase 9 header pairs with a `.cpp` for the same reason).
+- `FMidanTelemetryFrame` and `FMidanGhostRecording`/its member structs are plain C++
+  structs, not `USTRUCT`s — both are written as raw bytes by their own `operator<<`, and
+  neither benefits from UHT reflection or `UPROPERTY` overhead in a struct that exists to be
+  serialised, not inspected in the editor.
+- `UMidanTelemetrySubsystem` discovers sources via `TActorIterator` filtered by
+  `IMidanTelemetrySource`, not push-registration — `AMidanVehiclePawn` cannot call into
+  `MidanTelemetry` by type without `MidanVehicle` depending on `MidanTelemetry`, which the
+  graph does not grant. Same interface-discovery pattern already used in `MidanRace` (A34)
+  and `MidanAI` (A36).
+- `IMidanRaceStateInterface` (`MidanCore`) gained `GetRacerSectorIndex`, implemented by
+  `AMidanRaceGameState` reading `UMidanLapTimingSubsystem::GetRacerSectorIndex` — the
+  telemetry frame's `SectorIndex` field and the sector-consistency chart both needed live
+  sector boundaries, which only existed inside `MidanRace` until this addition.
+- `FMidanTelemetryFrame` gained `TrackLateralOffsetCm` beyond the plan's field list — the
+  racing-line deviation heat map chart needs a lateral-offset time series, and the
+  `IMidanTrackInterface::GetClosestDistanceToWorldLocation` call the accumulator already
+  makes for arc length produces it as a free out-parameter.
+
+See docs/ASSUMPTIONS.md A46–A50 for the reasoning behind each.
 
 ---
 

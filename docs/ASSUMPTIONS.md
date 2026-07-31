@@ -680,3 +680,73 @@ current state to the screen every frame.
 established, idiomatic mechanism for live UI in Unreal; building a custom timer-driven
 alternative would not reduce cost — the work still happens every rendered frame regardless
 of which mechanism triggers it — and would only add a bespoke pattern for no benefit.
+
+---
+
+## Phase 9 assumptions
+
+### A46 — Phase 9 built before Phase 8 · session ordering
+
+`MidanHotLapReplay` (Phase 8) needs a deterministic replay to drive the profiling capture —
+that is what `UMidanGhostPlayer` (Phase 9) is for. Building Phase 8 first would mean either
+stubbing the ghost dependency (a fake that would need rewriting the moment Phase 9 landed)
+or duplicating a chunk of ghost-playback logic inside Phase 8's own files.
+
+**Assumed:** this session wrote Phase 9 first, then Phase 8 against a working
+`UMidanGhostPlayer`. Same category of resolution as A20 and A26 (gameplay tags and Core
+interfaces pulled forward across phase boundaries for the same reason: the dependency
+existed in the plan's own shape regardless of which order the code gets written in). The
+phase NUMBERS and gate CONTENT are unchanged — Phase 8's gate still asks for a measured
+performance table, Phase 9's still asks for a telemetry report — only the order two
+sessions' worth of file-writing happened in shifted.
+
+### A47 — Telemetry sources are discovered, not push-registered · Phase 9
+
+`UMidanTelemetrySubsystem` needs to enumerate every `IMidanTelemetrySource` in the world
+each capture. `AMidanVehiclePawn` (the only current implementer) lives in `MidanVehicle`,
+which does not depend on `MidanTelemetry` — so it cannot call
+`RegisterSource(this)` on a subsystem type it cannot name.
+
+**Assumed:** `StartCapture` iterates the world via `TActorIterator<AActor>`, filtering by
+`Implements<UMidanTelemetrySource>()` — the same interface-discovery pattern already used
+by `MidanRace` (checkpoints filtering racers, A34) and `MidanAI` (overtake/avoidance finding
+nearby vehicles, A36). Discovery happens once per `StartCapture` call, not every accumulator
+tick, since the grid is fixed for the duration of a race.
+
+### A48 — `FMidanTelemetryFrame` and ghost structs are plain C++, not `USTRUCT` · Phase 9
+
+Both types exist to be serialised as raw bytes (`operator<<(FArchive&, ...)`) at 60Hz (frame)
+or per physics substep (ghost input sample) and are never inspected in the editor or exposed
+to Blueprint.
+
+**Assumed:** plain structs, hand-written `operator<<`, no `UPROPERTY`/`USTRUCT` overhead.
+This is a deliberate exception to "every USTRUCT in this project is BlueprintType where it
+carries data" — these two do not carry data FOR anything outside the C++ capture/replay
+path, so there is nothing for reflection to serve.
+
+### A49 — `IMidanRaceStateInterface` gained `GetRacerSectorIndex` · Phase 9
+
+The telemetry frame's `SectorIndex` field and the sector-time-consistency chart both need
+live sector boundaries. `UMidanLapTimingSubsystem::GetRacerSectorIndex` (`MidanRace`,
+Phase 5) already answers this; `MidanTelemetry` could not reach it without a new interface
+method, since it depends on `MidanCore` only.
+
+**Assumed:** added alongside the existing `GetRacerLapCount` on `IMidanRaceStateInterface`,
+implemented by `AMidanRaceGameState` by forwarding to the lap-timing subsystem it already
+holds a reference to (same module). No new module dependency — the interface already
+existed for exactly this class of question.
+
+### A50 — `Tools/analysis/telemetry_report.py` is stdlib-only, charts are hand-built SVG · Phase 9
+
+No `matplotlib`, `pandas`, or `numpy` reference exists anywhere else in this project's
+tooling — every other `Tools/` script is either `unreal`-only (editor Python, which ships
+its own interpreter) or plain stdlib.
+
+**Assumed:** the six required charts are generated as inline SVG (`<polyline>`, `<circle>`,
+`<rect>`) written directly into a self-contained HTML report, computed with `csv` and
+`statistics` from the standard library only. A hidden `pip install` requirement before "run
+the report" works is exactly the kind of friction that makes a reporting step get skipped in
+practice — see `.claude/skills/defensible-data-analysis`. The sector-time-consistency chart
+(§5) is rendered as a text table rather than a bar chart deliberately: a race's per-sector n
+is small (one instance per lap), and a bar's height implies more precision than that sample
+size supports — the raw numbers are more honest.

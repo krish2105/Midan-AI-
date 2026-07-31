@@ -724,3 +724,75 @@ Cannot be literal screenshots without a running editor (§0.1). Described instea
   the sample count if it is not.
 - **No accessibility pass beyond the specified colourblind rule.** Font sizing, contrast
   ratios, and controller navigation through the settings/pause menus are unverified.
+
+---
+
+## Phase 9 — Telemetry & analysis
+
+Built out of numeric order (docs/ASSUMPTIONS.md A46) — Phase 8's `MidanHotLapReplay` needs
+`UMidanGhostPlayer`, which lives here. Nothing has been compiled or run.
+
+### 9.1 Capture → export → report sequence — the Phase 9 gate
+
+Once the editor is available, with a race running (any single-player session with the
+circuit map):
+
+1. **Capture.** From a Blueprint or the console, call
+   `UMidanTelemetrySubsystem::StartCapture("gate_test")` at the start of a lap and
+   `StopCapture()` at the end. `UMidanDeveloperSettings::bTelemetryCaptureEnabledByDefault`
+   stays false in Shipping (§Debug in `MidanDeveloperSettings.h`) — this is a development
+   toggle, not something that runs unattended in a shipped build.
+2. **Wait for the flush.** `StopCapture` dispatches one final background flush per source but
+   does not block on it — give it a second or two before the next step, or the CSV export
+   will read a file the background task hasn't finished writing.
+3. **Export to CSV**, once per source you want charted:
+   ```
+   UMidanTelemetrySubsystem::ExportCaptureToCsv("Player")
+   UMidanTelemetrySubsystem::ExportCaptureToCsv("AI01")
+   ```
+   Files land at `Saved/Telemetry/gate_test_<SourceId>.midantelem` (binary) and
+   `Saved/Telemetry/gate_test_<SourceId>.csv`.
+4. **Run the report:**
+   ```bash
+   python3 Tools/analysis/telemetry_report.py \
+       --player Saved/Telemetry/gate_test_Player.csv \
+       --ai Saved/Telemetry/gate_test_AI01.csv \
+       --out Saved/Telemetry/report.html
+   ```
+   Open `report.html` — all six charts, each with its sample count and (for chart 6) its
+   matched arc-length range.
+
+### 9.2 Verify zero game-thread I/O — the gate's other deliverable
+
+With Unreal Insights (or a simple `stat game` / file-I/O stat overlay) running during a
+capture: confirm no `FFileHelper`/disk-write activity appears on the game thread while
+`StartCapture` is active. The only synchronous file I/O in this module —
+`ExportCaptureToCsv`, `UMidanGhostRecorder::SaveToFile`, `UMidanGhostPlayer::LoadFromFile` —
+must show up ONLY at the explicit call sites in step 3 above and in ghost setup, never during
+the 60Hz accumulator or the periodic flush (which dispatches to
+`FMidanTelemetryFlushTask` on the thread pool — confirm the write shows up there, not on the
+game thread, in Insights' thread view).
+
+### 9.3 Author a ghost recording
+
+1. Add `UMidanGhostRecorder` to the player vehicle Blueprint (or a dedicated recording rig).
+2. Call `StartRecording()` at the green light, `StopRecording()` at the finish line,
+   `SaveToFile("Saved/Ghosts/reference_lap.midanghost")`.
+3. To play it back: add `UMidanGhostPlayer` to a (separate, non-input-driven) vehicle
+   instance, `LoadFromFile(...)`, `StartPlayback()`. Verify `ResyncPositionToleranceCm` /
+   `ResyncVelocityToleranceCmS` rarely trigger a snap on a stable build — frequent snapping
+   means the replay is diverging from the recording faster than expected, which is itself a
+   physics-determinism signal worth investigating before Phase 8 leans on it for profiling.
+
+### 9.4 Known gaps at this gate
+
+- **Nothing is compiled.** Every `FArchive operator<<` call, `TActorIterator` filter, and
+  `AsyncPhysicsTickComponent` override is unverified against 5.8 headers, same as every
+  prior phase.
+- **The binary format has not been fuzzed or version-migration-tested.** `ReadFrames` and
+  `MidanGhostIO::LoadRecording` reject an unknown format version outright — there is no
+  migration path yet, by design, since format version 1 has never shipped.
+- **CSV size is unbounded for a very long capture.** A single lap (this gate's scope) is
+  small; a multi-hour endurance capture would produce a CSV in the hundreds of megabytes,
+  which `telemetry_report.py`'s in-memory row list would then need revisiting for. Out of
+  scope for a vertical slice.

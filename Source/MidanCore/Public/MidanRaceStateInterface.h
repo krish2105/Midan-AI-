@@ -45,6 +45,13 @@ public:
 	/** Completed laps for a racer, 0 on the opening lap. */
 	virtual int32 GetRacerLapCount(const AActor* Racer) const = 0;
 
+	/** Current sector index within the racer's present lap, 0-based. Added
+	 *  at Phase 9: Tools/analysis/telemetry_report.py's sector-time
+	 *  consistency chart needs live sector boundaries, and
+	 *  UMidanLapTimingSubsystem::GetRacerSectorIndex already has the answer
+	 *  — MidanTelemetry just could not reach it without this. */
+	virtual int32 GetRacerSectorIndex(const AActor* Racer) const = 0;
+
 	/** Total racers in the field. Difficulty and rubber-band logic scale
 	 *  against position within the field, so it needs the denominator. */
 	virtual int32 GetRacerCount() const = 0;

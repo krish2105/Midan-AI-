@@ -56,6 +56,7 @@ public:
 	virtual bool IsRacingActive() const override;
 	virtual int32 GetRacerPosition(const AActor* Racer) const override;
 	virtual int32 GetRacerLapCount(const AActor* Racer) const override;
+	virtual int32 GetRacerSectorIndex(const AActor* Racer) const override;
 	virtual int32 GetRacerCount() const override;
 	virtual float GetCountdownRemainingSeconds() const override;
 

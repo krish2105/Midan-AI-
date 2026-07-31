@@ -103,6 +103,12 @@ int32 AMidanRaceGameState::GetRacerLapCount(const AActor* Racer) const
 	return LapTiming ? LapTiming->GetRacerLapIndex(Racer) : 0;
 }
 
+int32 AMidanRaceGameState::GetRacerSectorIndex(const AActor* Racer) const
+{
+	const UMidanLapTimingSubsystem* LapTiming = GetWorld() ? GetWorld()->GetSubsystem<UMidanLapTimingSubsystem>() : nullptr;
+	return LapTiming ? LapTiming->GetRacerSectorIndex(Racer) : 0;
+}
+
 int32 AMidanRaceGameState::GetRacerCount() const
 {
 	return PlayerArray.Num();
