@@ -17,7 +17,7 @@ document is the file manifest and the order of work.
 | 5 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Track & race systems |
 | 6 | **files written · gate BLOCKED on engine install** | Sonnet 5 | AI opponents |
 | 7 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Race flow & UI |
-| 8 | not started | Opus 5 | Rendering & performance |
+| 8 | **files written · gate BLOCKED on engine install AND real-hardware measurement** | Opus 5 | Rendering & performance |
 | 9 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Telemetry & analysis |
 | 10 | not started | Sonnet 5 → Haiku 4.5 | Build, CI & ship |
 
@@ -393,6 +393,38 @@ See docs/ASSUMPTIONS.md A42–A45 for the reasoning behind each.
 
 **Gate:** run the profiling harness. Print the measured table with pass/fail per line and
 all five provenance fields. **Do not proceed if a hard gate fails — fix it first.**
+
+**Status: files written, gate BLOCKED — harder than "engine install".** Every other phase's
+gate is blocked purely on having an engine to compile against. Phase 8's gate additionally
+requires a **measured** result on real hardware — `docs/PERFORMANCE_BUDGET.md`'s "no
+measured numbers exist" status is unchanged by this phase's work, by design: the harness
+existing is not a measurement, and CLAUDE.md's measurement rule means no number was
+invented to fill the gap. This phase cannot be marked passed by any session without a
+physical machine to run on.
+
+**Built after Phase 9, not before** (docs/ASSUMPTIONS.md A46) — `AMidanHotLapReplay` needs
+`UMidanGhostPlayer`, which is a Phase 9 deliverable.
+
+**`perf_report.py` parses a CSV Profiler export, not a raw Insights trace.** The plan says
+"parses an Unreal Insights trace"; UE's `.utrace` format is an undocumented binary format
+with no stable pure-Python parser, while the CSV Profiler (`CsvProfile Start/Stop`, also
+built into the engine) produces a plain per-frame CSV that is trivially stdlib-parseable and
+is what `Tools/analysis/telemetry_report.py` (Phase 9) already established as this project's
+tooling format. `MidanPerfCaptureLibrary::StartInsightsTrace` still exists for the deeper,
+heavier investigation an Insights trace is actually good for (which sub-pass within a
+budget line is the problem) — it is just not what the routine gate run parses.
+
+**Deviations from plan, recorded so they are not rediscovered:**
+
+- `Config/DefaultScalability.ini`'s four tiers and `Config/DefaultEngine.ini`'s VSM/Lumen/TSR
+  additions are **unmeasured starting points**, explicitly labelled as such in both files —
+  not the tuned, measured values the plan's phrasing ("tuned per tier") might suggest. They
+  exist so the engine has something to run with; the Phase 8 gate is what turns them from
+  guesses into measured values.
+- `docs/PERFORMANCE_BUDGET.md`'s measured columns are **still `—`** after this phase — see
+  the status note above.
+
+See docs/ASSUMPTIONS.md A51–A53 for the reasoning behind each.
 
 ---
 

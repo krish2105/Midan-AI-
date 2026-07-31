@@ -796,3 +796,75 @@ game thread, in Insights' thread view).
   small; a multi-hour endurance capture would produce a CSV in the hundreds of megabytes,
   which `telemetry_report.py`'s in-memory row list would then need revisiting for. Out of
   scope for a vertical slice.
+
+---
+
+## Phase 8 — Rendering & performance
+
+**This phase's gate needs a physical machine, not just an editor install.** Everything
+below assumes §0.1 is done — Phases 1–9's blocker — plus real hardware to run on.
+
+### 8.1 Build the perf-capture test map
+
+A minimal level: the circuit (`AMidanTrackSpline`, checkpoints), one vehicle with a
+`UMidanGhostPlayer` component already attached, and one `AMidanHotLapReplay` actor with
+`TargetVehicle` pointed at it and `GhostFilePath` pointed at a recording made per Phase 9
+§9.3 (a clean, representative lap — not a crash-recovery lap).
+
+### 8.2 Verify Metal feature parity — before trusting any of this
+
+`docs/MANUAL_STEPS.md` §0.3 (Phase 0) is the actual checklist. Do it now if it was deferred:
+confirm Nanite, Lumen software tracing, Virtual Shadow Maps, and TSR are all at expected
+quality on UE 5.8 / Apple Silicon / Metal before spending time tuning numbers that a weaker
+Metal code path would invalidate.
+
+### 8.3 Run the capture
+
+```bash
+"<UE>/Engine/Binaries/Mac/UnrealEditor-Cmd" "$PWD/Midan.uproject" \
+    -run=pythonscript -script="$PWD/Tools/editor_python/capture_perf_baseline.py" -runs=3
+```
+
+This starts the CSV Profiler and the hot-lap replay together. Watch the Output Log for
+`AMidanHotLapReplay`'s `OnReplayFinished` (logged as "all N run(s) complete"), then call
+`UMidanPerfCaptureLibrary::StopCsvProfilerCapture` (console command or a small Blueprint
+bound to the event) to close out the CSV. It lands in `Saved/Profiling/`.
+
+### 8.4 Run the report — the Phase 8 gate
+
+```bash
+python3 Tools/analysis/perf_report.py \
+    --csv Saved/Profiling/perf_baseline_run1.csv \
+    --csv Saved/Profiling/perf_baseline_run2.csv \
+    --csv Saved/Profiling/perf_baseline_run3.csv \
+    --config Test --resolution "1080p @ TSR 67%" \
+    --machine "<actual machine, GPU, OS, driver>" --tier Epic \
+    --physics-allocations <measured, e.g. via Insights memory tracker> \
+    --telemetry-gamethread-io <measured — 0 expected, verify> \
+    --editor-module-in-shipping <0 in a Test build; the real check is Phase 10's Shipping build>
+```
+
+**This is the gate.** Paste the full printed table. If any HARD GATE line reads FAIL or
+UNVERIFIED, per `docs/PHASE_PLAN.md`: **do not proceed — fix it first.** Update
+`docs/PERFORMANCE_BUDGET.md`'s Measured columns with the real numbers once this passes —
+that document's "no measured numbers exist" status line is what changes, not this file.
+
+### 8.5 Tune scalability if the Epic tier fails
+
+If Tier 3 (Epic) in `Config/DefaultScalability.ini` fails a hard or tuning gate, apply the
+cut order from `docs/PERFORMANCE_BUDGET.md` §5 in sequence — do not cut out of order, and
+never touch film grain, the exposure clamp, or motion blur. Re-run §8.3–8.4 after each cut
+to confirm it actually bought back the budget before moving to the next.
+
+### 8.6 Known gaps at this gate
+
+- **Nothing has been run.** No engine, no hardware, no measured numbers — this phase's code
+  and config are a harness, not a result. See the phase-plan status note.
+- **`COLUMN_CANDIDATES` in `perf_report.py` is a best guess** at CSV Profiler stat names —
+  confirm against a real export and adjust the list if a metric reads `----` (UNVERIFIED)
+  when it should have data.
+- **`MidanBuildHLODCommandlet`'s `UWorldPartitionHLODsBuilder` call is the least certain API
+  in this phase** (docs/ASSUMPTIONS.md, the commentary in the commandlet's own `.cpp`). If it
+  does not compile, the fallback is shelling out to
+  `-run=WorldPartitionBuilderCommandlet -Builder=WorldPartitionHLODsBuilder -HLODLevel=<N>`
+  directly from `Tools/build/build.py` at Phase 10 instead of through this commandlet.

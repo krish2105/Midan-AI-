@@ -36,7 +36,16 @@ public class MidanEditorTools : ModuleRules
 			"MidanVehicle",
 			"MidanRace",
 			"MidanAI",
-			"MidanTelemetry"
+			"MidanTelemetry",
+
+			// WorldPartitionHLODsBuilder (MidanBuildHLODCommandlet, Phase 8)
+			// — module name unconfirmed without an installed 5.8 engine; it
+			// has moved between "WorldPartitionEditor" and a dedicated HLOD
+			// utilities module across UE5 releases. See
+			// docs/ASSUMPTIONS.md and MidanBuildHLODCommandlet.cpp's API
+			// VERIFY comment.
+			"WorldPartitionEditor",
+			"WorldPartitionHLODUtilities"
 		});
 	}
 }

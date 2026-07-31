@@ -750,3 +750,58 @@ practice — see `.claude/skills/defensible-data-analysis`. The sector-time-cons
 (§5) is rendered as a text table rather than a bar chart deliberately: a race's per-sector n
 is small (one instance per lap), and a bar's height implies more precision than that sample
 size supports — the raw numbers are more honest.
+
+---
+
+## Phase 8 assumptions
+
+### A51 — `perf_report.py` parses a CSV Profiler export, not a raw `.utrace` file · Phase 8
+
+`docs/PHASE_PLAN.md` says Phase 8's script "parses an Unreal Insights trace." Unreal's
+`.utrace` format is an undocumented, versioned binary format with no maintained pure-Python
+parser — writing one from scratch is a project in itself, and getting it subtly wrong would
+produce a report that LOOKS authoritative while silently misreading frame boundaries.
+
+**Assumed:** `perf_report.py` reads the engine's built-in **CSV Profiler** export instead
+(`CsvProfile Start/Stop`) — a plain per-frame CSV, stdlib-parseable, and the same tooling
+shape `telemetry_report.py` (Phase 9) already established for this project. Deeper
+per-sub-pass investigation still goes through a real Insights trace
+(`MidanPerfCaptureLibrary::StartInsightsTrace` exists for exactly that), but the routine
+gate run — "print the measured table with pass/fail per line" — does not need Insights'
+full depth, only the per-frame numbers the budget table already asks for.
+
+**Cost:** the CSV Profiler's per-GPU-pass stat names are coarser and less standardised than
+what an Insights trace would expose, which is why `COLUMN_CANDIDATES` in `perf_report.py`
+is marked `API VERIFY` — the exact stat names available depend on which `-csvGpuStats`
+categories were enabled during capture, unconfirmed without an installed engine.
+
+### A52 — Scalability tiers and engine-config measured clamps are unmeasured starting points, not tuned results · Phase 8
+
+`docs/PHASE_PLAN.md` describes `Config/DefaultScalability.ini` as gaining "four populated
+tiers" and `Config/DefaultEngine.ini` as gaining "measured" VSM/Lumen/TSR values — but no
+engine is installed in this environment, so nothing has actually been measured
+(docs/MANUAL_STEPS.md §0.1).
+
+**Assumed:** both files are populated with defensible engineering defaults, each explicitly
+labelled `UNMEASURED STARTING POINT` in its own comments — the same category CLAUDE.md
+already established for Phase 2's vehicle Data Asset defaults ("first drafts to tune by
+feel, not final values"), applied here to render/scalability settings instead. This is a
+distinct category from a CLAUDE.md-forbidden claimed measurement: a config file needs SOME
+value to run with, and marking it clearly as unmeasured is what keeps that need from
+becoming an unlabelled performance claim. `docs/PERFORMANCE_BUDGET.md`'s own "no measured
+numbers exist" status is deliberately left unchanged by this phase, and its Measured
+columns stay `—`.
+
+### A53 — `MidanHotLapReplay` resets between runs via `IMidanTrackInterface`, never via the ghost's own recorded start · Phase 8
+
+A naive implementation might assume the recorded ghost already starts and ends at the same
+place (a closed-loop lap) and simply let consecutive `StartPlayback()` calls run back to
+back. That assumes the PREVIOUS run's physics landed the car exactly where the recording
+began, which is not guaranteed — drift, a resync correction near the finish line, or a
+recording that does not perfectly close the loop would all compound across runs.
+
+**Assumed:** `AMidanHotLapReplay::ResetVehicleToStartLine` explicitly teleports to
+`IMidanTrackInterface::GetTransformAtDistance(0)` with zeroed velocity between every run,
+rather than trusting wherever the vehicle physically ended up. `docs/PERFORMANCE_BUDGET.md`
+§4's entire premise — that 3+ runs are comparable — depends on every run starting from a
+literally identical state, not an approximately-similar one.

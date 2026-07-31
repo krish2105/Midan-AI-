@@ -4,9 +4,12 @@
 `docs/ART_DIRECTION.md` §7.1 — the revised MacBook-reality table — **not** the 1440p table
 in master prompt §5.1. 1440p is a documented stretch tier, not a gate.
 
-**Status: no measured numbers exist.** Phase 0 sets the targets. Measured columns are
-filled in from Phase 8 onward. A number that has not been measured does not go in this
-document.
+**Status: no measured numbers exist.** Phase 0 sets the targets. Phase 8 built the
+measurement harness (`AMidanHotLapReplay`, `Tools/analysis/perf_report.py`,
+`Tools/editor_python/capture_perf_baseline.py`) but has not run it — no engine is installed
+in this environment (docs/MANUAL_STEPS.md §0.1). Every "Measured" cell below stays `—` until
+a human runs `perf_report.py` against a real capture on real hardware. **The harness
+existing is not a measurement.** See docs/MANUAL_STEPS.md Phase 8 for the exact command.
 
 > **Tracks `ART_DIRECTION.md` v2.0** — the neon city pivot with three static time-of-day
 > presets. The v1.0 golden-hour canyon allocation is retained below for comparison, because
@@ -230,7 +233,10 @@ manual step 3 in `docs/MANUAL_STEPS.md`.
 
 ## 7. Configuration that follows from the budget
 
-Locked at Phase 1, tuned per tier at Phase 8.
+Locked at Phase 1. Phase 8 populated the four scalability tiers in
+`Config/DefaultScalability.ini` and the measured-clamp settings in `Config/DefaultEngine.ini`
+(VSM resolution bias, Lumen trace distance, TSR history) — as **unmeasured starting points**,
+not tuned results. Real tuning happens once the Phase 8 gate has run on real hardware.
 
 | Setting | Decision | Reason |
 |---|---|---|
