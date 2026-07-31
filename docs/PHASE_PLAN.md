@@ -19,7 +19,7 @@ document is the file manifest and the order of work.
 | 7 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Race flow & UI |
 | 8 | **files written · gate BLOCKED on engine install AND real-hardware measurement** | Opus 5 | Rendering & performance |
 | 9 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Telemetry & analysis |
-| 10 | not started | Sonnet 5 → Haiku 4.5 | Build, CI & ship |
+| 10 | **files written · gate BLOCKED on engine install, hardware, and a distribution decision** | Sonnet 5 → Haiku 4.5 | Build, CI & ship |
 
 ---
 
@@ -521,3 +521,31 @@ lane is gated on runner availability. Keep the DDC shared and warm — a cold DD
 
 **Gate:** produce a Shipping build, run verification, report build size, launch time, and
 hitch count **before and after** PSO caching. Final file summary.
+
+**Status: files written, gate BLOCKED — needs an engine, hardware, and a signed itch.io
+distribution decision.** Every script in `Tools/build/` and the `MidanTests` module are
+written and internally reviewed (`verify_build.py` and `perf_report.py`'s logic were both
+exercised against synthetic data during this session — see their own test runs in the
+session log, not committed as fixtures since neither script owns test fixtures). No engine
+is installed in this environment, so none of them has ever produced a real build.
+
+**Deviations from plan, recorded so they are not rediscovered:**
+
+- `MidanTests` is added to `Midan.Target.cs` **conditionally** (`Target.Configuration !=
+  Shipping`) rather than unconditionally — the plan's phrasing implies a fixed module list,
+  but a functional-test module has the same "must never reach Shipping" requirement
+  `MidanEditorTools` already established, and a Game target legitimately builds Shipping
+  configurations. `MidanEditor.Target.cs` adds it unconditionally, since an Editor target is
+  never Shipping.
+- `Tools/build/verify_build.py`'s six hard gates each ship with an honest strength caveat in
+  their own output: the pak-integrity check confirms non-empty files, not a full
+  `UnrealPak -test` CRC pass, and the "reached the main menu" smoke test falls back to
+  "launched and exited cleanly" pending a real menu-reached signal that would need content
+  wiring this phase does not build. Both are stated as limitations in the script's printed
+  report, not silently overclaimed.
+- `README.md`'s performance table, minimum specs, and PSO hitch-count numbers remain
+  **unfilled** — same measurement-rule reasoning as Phase 8's `PERFORMANCE_BUDGET.md`. The
+  controls card, known issues, and asset-attribution sections ARE filled in, since none of
+  those require a measurement to state.
+
+See docs/ASSUMPTIONS.md A54–A56 for the reasoning behind each.

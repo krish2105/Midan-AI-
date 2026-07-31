@@ -74,12 +74,19 @@ linking `MidanVehicle` directly — is recorded as assumption A7 in `docs/ASSUMP
 **`MidanEditorTools` is absent from the runtime target.** Its absence from a Shipping
 binary is a hard gate in `Tools/build/verify_build.py` (Phase 10).
 
+**`MidanTests`** (Phase 10) → `Core`, `Vehicle`, `Race`, `AI`, engine `FunctionalTesting`.
+Map-based functional tests (`docs/ARCHITECTURE.md` §5's lower half — vehicle spawn, AI lap
+completion, respawn, race completion). Added to `Midan.Target.cs` only when
+`Target.Configuration != Shipping`, and unconditionally to `MidanEditor.Target.cs` (an
+Editor target is never Shipping). Same absence-from-Shipping gate as `MidanEditorTools`,
+extended by `verify_build.py` to cover both.
+
 ### 2.2 Targets
 
 | File | Type | Extra modules |
 |---|---|---|
-| `Source/Midan.Target.cs` | `TargetType.Game` | MidanCore, MidanVehicle, MidanRace, MidanAI, MidanTelemetry |
-| `Source/MidanEditor.Target.cs` | `TargetType.Editor` | the five above **+ MidanEditorTools** |
+| `Source/Midan.Target.cs` | `TargetType.Game` | MidanCore, MidanVehicle, MidanRace, MidanAI, MidanTelemetry **+ MidanTests when not Shipping** |
+| `Source/MidanEditor.Target.cs` | `TargetType.Editor` | the five above **+ MidanEditorTools + MidanTests** |
 
 ### 2.3 Tick inventory — pre-committed
 
@@ -323,10 +330,10 @@ Designed in now, because a class that needs a `UWorld` to test usually did not n
 | PID convergence and anti-windup | Automation Spec | `FMidanPIDController` |
 | Telemetry serialisation round-trip | Automation Spec | `FMidanTelemetryBinaryWriter` |
 | Data Asset validation rules | Automation Spec + `-run=DataValidation` | `UMidanDataAsset` subclasses |
-| Vehicle spawns and drives | Functional Test | map-based |
-| AI completes a lap without leaving track | Functional Test | map-based |
-| Respawn restores valid state | Functional Test | map-based |
-| Race completes and produces results | Functional Test | map-based |
+| Vehicle spawns and drives | Functional Test | `AVehicleSpawnFunctionalTest` (`MidanTests`, Phase 10) |
+| AI completes a lap without leaving track | Functional Test | `AAILapCompletionFunctionalTest` (`MidanTests`, Phase 10) |
+| Respawn restores valid state | Functional Test | `ARespawnFunctionalTest` (`MidanTests`, Phase 10) |
+| Race completes and produces results | Functional Test | `ARaceCompletionFunctionalTest` (`MidanTests`, Phase 10) |
 | Deterministic hot-lap performance run | Gauntlet | `MidanHotLapReplay` |
 
 The four Automation Spec targets in the top half are all pure math or pure serialisation.

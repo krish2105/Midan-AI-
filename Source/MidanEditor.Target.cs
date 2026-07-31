@@ -1,4 +1,6 @@
-// Editor target. The five runtime modules plus the editor-only tooling module.
+// Editor target. The five runtime modules plus the editor-only tooling
+// module and MidanTests (Phase 10) — an Editor target is never Shipping, so
+// the functional-test module is always available to run in-editor.
 
 using UnrealBuildTool;
 using System.Collections.Generic;
@@ -18,7 +20,8 @@ public class MidanEditorTarget : TargetRules
 			"MidanRace",
 			"MidanAI",
 			"MidanTelemetry",
-			"MidanEditorTools"
+			"MidanEditorTools",
+			"MidanTests"
 		});
 	}
 }

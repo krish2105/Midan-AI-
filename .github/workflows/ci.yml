@@ -1,0 +1,125 @@
+# Midan CI — self-hosted runners only. No hosted GitHub runner has UE 5.8
+# installed, and installing it fresh per run would make "keep the DDC shared
+# and warm" (docs/PHASE_PLAN.md Phase 10) impossible — a cold DDC turns a
+# 10-minute build into 90.
+#
+# Mac lane is active now (docs/ASSUMPTIONS.md A4: this project developed
+# Mac-first). The Win64 lane is defined but gated on runner availability —
+# it will sit "skipped" until a Windows self-hosted runner labelled
+# `midan-win64` exists, at which point removing the `if: false` below is the
+# entire activation step.
+
+name: Midan CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  UE_PROJECT: Midan.uproject
+
+jobs:
+  compile-mac:
+    name: Compile (Mac, Development Editor)
+    runs-on: [self-hosted, macOS, midan-mac]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate project files
+        run: |
+          "/Users/Shared/Epic Games/UE_5.8/Engine/Build/BatchFiles/Mac/GenerateProjectFiles.sh" \
+            -project="$PWD/$UE_PROJECT" -game -engine
+
+      - name: Build MidanEditor (Development)
+        run: |
+          "/Users/Shared/Epic Games/UE_5.8/Engine/Build/BatchFiles/Mac/Build.sh" \
+            MidanEditor Mac Development -project="$PWD/$UE_PROJECT"
+
+  data-validation:
+    name: Data Asset validation (Mac)
+    runs-on: [self-hosted, macOS, midan-mac]
+    needs: compile-mac
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run -run=DataValidation
+        run: |
+          "/Users/Shared/Epic Games/UE_5.8/Engine/Binaries/Mac/UnrealEditor-Cmd" \
+            "$PWD/$UE_PROJECT" -run=DataValidation
+
+  automation-specs:
+    name: Automation Specs (Mac)
+    runs-on: [self-hosted, macOS, midan-mac]
+    needs: compile-mac
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run every Midan.* Automation Spec
+        run: |
+          "/Users/Shared/Epic Games/UE_5.8/Engine/Binaries/Mac/UnrealEditor-Cmd" \
+            "$PWD/$UE_PROJECT" -run=Automation -test="Midan" -log \
+            -ReportOutputPath="$PWD/Saved/Automation/CI"
+      - name: Upload Automation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: automation-report-mac
+          path: Saved/Automation/CI
+
+  functional-tests:
+    name: Functional Tests (Mac, Development)
+    runs-on: [self-hosted, macOS, midan-mac]
+    needs: compile-mac
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run MidanTests functional tests against the perf-capture map
+        run: |
+          "/Users/Shared/Epic Games/UE_5.8/Engine/Binaries/Mac/UnrealEditor-Cmd" \
+            "$PWD/$UE_PROJECT" /Game/Midan/Maps/L_MidanCircuit \
+            -run=FunctionalTest -unattended -nosplash
+
+  package-shipping-mac:
+    name: Package Shipping (Mac)
+    runs-on: [self-hosted, macOS, midan-mac]
+    needs: [data-validation, automation-specs, functional-tests]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, PSO cache, verify
+        run: |
+          python3 Tools/build/package_shipping.py --platform Mac \
+            --archive-dir "$PWD/Builds/Mac"
+      - name: Upload Shipping build
+        uses: actions/upload-artifact@v4
+        with:
+          name: midan-shipping-mac
+          path: Builds/Mac
+          retention-days: 14
+
+  compile-win64:
+    name: Compile (Win64, Development Editor) — GATED
+    runs-on: [self-hosted, Windows, midan-win64]
+    # Flip this to enable the lane once a Windows self-hosted runner labelled
+    # midan-win64 exists — docs/ASSUMPTIONS.md A4, A19.
+    if: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate project files
+        run: |
+          & "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\GenerateProjectFiles.bat" `
+            -project="$PWD\$env:UE_PROJECT" -game -engine
+      - name: Build MidanEditor (Development)
+        run: |
+          & "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat" `
+            MidanEditor Win64 Development -project="$PWD\$env:UE_PROJECT"
+
+  package-shipping-win64:
+    name: Package Shipping (Win64) — GATED
+    runs-on: [self-hosted, Windows, midan-win64]
+    needs: compile-win64
+    if: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build, PSO cache, verify
+        run: |
+          python3 Tools/build/package_shipping.py --platform Win64 --archive-dir "$PWD\Builds\Win64"

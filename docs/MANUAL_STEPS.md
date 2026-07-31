@@ -868,3 +868,63 @@ to confirm it actually bought back the budget before moving to the next.
   does not compile, the fallback is shelling out to
   `-run=WorldPartitionBuilderCommandlet -Builder=WorldPartitionHLODsBuilder -HLODLevel=<N>`
   directly from `Tools/build/build.py` at Phase 10 instead of through this commandlet.
+
+---
+
+## Phase 10 — Build, CI & ship
+
+The full runbook lives in **`docs/BUILD_RUNBOOK.md`** — this section covers the pieces that
+need a human decision or a one-time machine setup, not the command sequence itself.
+
+### 10.1 Build the functional-test map
+
+Same perf-capture map from Phase 8 §8.1 works, or a dedicated `L_MidanFunctionalTests` map —
+either way it needs: the circuit, a grid, and one instance each of
+`AVehicleSpawnFunctionalTest`, `AAILapCompletionFunctionalTest`, `ARespawnFunctionalTest`,
+and `ARaceCompletionFunctionalTest` (`Source/MidanTests/`), each configured per its own
+`EditInstanceOnly` properties (target vehicle/opponent, timeouts). For
+`ARaceCompletionFunctionalTest`, set the map's `UMidanRaceRulesDataAsset::LapCount` to 1 —
+running a full 3-lap race on every CI push is an unnecessary cost for a correctness check.
+
+### 10.2 Set up the self-hosted CI runner(s)
+
+1. Install a GitHub Actions self-hosted runner on the Mac build machine, labelled
+   `midan-mac` (matches `.github/workflows/ci.yml`'s `runs-on`).
+2. Point it at a **shared, persistent DDC** location — `docs/PHASE_PLAN.md`'s "keep the DDC
+   shared and warm" note is not optional; a cold DDC turns a 10-minute CI build into 90.
+3. Install UE 5.8 on the runner machine at the conventional path
+   `Tools/build/build.py` expects (or set `MIDAN_ENGINE_DIR`).
+4. **Win64 lane:** when a Windows machine or cloud runner becomes available, label it
+   `midan-win64`, repeat steps 2–3 for Windows paths, then flip `if: false` to `if: true` on
+   `.github/workflows/ci.yml`'s `compile-win64` and `package-shipping-win64` jobs. That is
+   the entire activation step — the job definitions are already written.
+
+### 10.3 Set up itch.io distribution (optional)
+
+1. Create the itch.io project.
+2. Install `butler`, run `butler login` once, interactively, on the machine that will run
+   `Tools/build/upload_itch.py` — this repo's tooling never touches credentials directly.
+3. Decide channel names now (e.g. `mac-test`, `mac-release`) so `docs/BUILD_RUNBOOK.md` §8's
+   example command matches what actually gets used.
+
+### 10.4 Run the Phase 10 gate
+
+Follow `docs/BUILD_RUNBOOK.md` §6 (`package_shipping.py`) end to end on real hardware, then
+§7 (`verify_build.py`) to confirm every hard gate passes. Paste the full printed
+verification report — per `docs/PHASE_PLAN.md`, **do not proceed (do not upload, do not
+mark the phase passed) if any hard gate fails.**
+
+Fill in `README.md`'s Performance and Minimum specs sections with the real numbers this
+produces, with all five provenance fields from `docs/PERFORMANCE_BUDGET.md` §4. Update
+`docs/PERFORMANCE_BUDGET.md`'s own status line at the same time — it should stop reading "no
+measured numbers exist" the moment this gate has a real result, not before.
+
+### 10.5 Known gaps at this gate
+
+- **Nothing has been run.** No engine, no hardware — every script in this phase was
+  reviewed and, where possible, exercised against synthetic data (docs/PHASE_PLAN.md's
+  status note), but none has produced a real Midan build.
+- **`verify_build.py`'s size budget (`DEFAULT_SIZE_BUDGET_MB = 8192`) is a placeholder**,
+  not a measured ceiling — tighten it once a real cooked build exists to budget against.
+- **CI's `functional-tests` job assumes `L_MidanCircuit` exists and is wired per §10.1** —
+  it will fail immediately on a fresh checkout until that map is authored.

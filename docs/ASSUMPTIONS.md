@@ -805,3 +805,48 @@ recording that does not perfectly close the loop would all compound across runs.
 rather than trusting wherever the vehicle physically ended up. `docs/PERFORMANCE_BUDGET.md`
 §4's entire premise — that 3+ runs are comparable — depends on every run starting from a
 literally identical state, not an approximately-similar one.
+
+---
+
+## Phase 10 assumptions
+
+### A54 — `MidanTests` gains a Shipping-exclusion identical to `MidanEditorTools`'s · Phase 10
+
+The plan lists `Source/MidanTests/MidanTests.Build.cs` as a Phase 10 deliverable without
+stating how it is kept out of a Shipping binary — `MidanEditorTools` solves this by simply
+never appearing in `Midan.Target.cs`'s `ExtraModuleNames`, but a functional-test module has
+a real use in Development and Test builds (CI needs to run it), so it cannot be unconditionally
+absent the same way.
+
+**Assumed:** `Source/Midan.Target.cs` adds `MidanTests` conditionally —
+`if (Target.Configuration != UnrealTargetConfiguration.Shipping)`. `Tools/build/
+verify_build.py`'s `no_forbidden_modules` gate checks for both `MidanEditorTools` and
+`MidanTests` symbols in the shipped binary, extending the existing hard gate rather than
+adding a parallel one.
+
+### A55 — `perf_report.py`'s CSV Profiler approach (A51) extends to `verify_build.py`'s honesty discipline · Phase 10
+
+Two of `verify_build.py`'s six gates — pak integrity and the "reached the main menu" smoke
+test — cannot be fully implemented without engine-side tooling (`UnrealPak -test`, a real
+menu-reached signal from game content) that does not exist without an installed engine and,
+for the smoke-test signal, content wiring outside this phase's scope.
+
+**Assumed:** both gates run a weaker but honest check — non-empty pak files, and "the
+process launched and exited cleanly" as a smoke-test proxy — and each STATES that weaker
+scope in its own printed output rather than reporting `PASS` with implied full coverage.
+Same principle as A51's CSV Profiler substitution: a documented, narrower check beats an
+unbuilt precise one, provided the narrowing is visible to whoever reads the report.
+
+### A56 — README's performance numbers stay unfilled; controls, known issues, and
+attributions do not · Phase 10
+
+`docs/PHASE_PLAN.md` lists "measured performance table" as one README section this phase
+modifies, alongside three sections (controls card, minimum specs, known issues) that read
+as though they belong in the same pass.
+
+**Assumed:** the measurement-rule distinction from A52 applies again here: the performance
+table and minimum-specs section require a real measured result and stay unfilled (matching
+`docs/PERFORMANCE_BUDGET.md`'s own unchanged status), while the controls card (a static
+fact about `IMC_MidanDriving`'s bindings), known issues (a true statement about this
+session's actual state), and asset attributions (drawn from `docs/ASSET_LICENCES.md`, which
+currently has no CC-BY rows requiring one) need no measurement and are filled in now.
