@@ -16,7 +16,7 @@ document is the file manifest and the order of work.
 | 4 | **files written · gate BLOCKED on engine install** | Opus 5 | Feel layer |
 | 5 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Track & race systems |
 | 6 | **files written · gate BLOCKED on engine install** | Sonnet 5 | AI opponents |
-| 7 | not started | Sonnet 5 | Race flow & UI |
+| 7 | **files written · gate BLOCKED on engine install** | Sonnet 5 | Race flow & UI |
 | 8 | not started | Opus 5 | Rendering & performance |
 | 9 | not started | Sonnet 5 | Telemetry & analysis |
 | 10 | not started | Sonnet 5 → Haiku 4.5 | Build, CI & ship |
@@ -330,6 +330,44 @@ Layout, bindings, styling and accessibility from `docs/ART_DIRECTION.md` §8:
 - Colourblind-safe delta indication: sign and arrow, **not colour alone**.
 
 **Gate:** screenshot descriptions and the full settings schema. Stop.
+
+**Status: files written, gate BLOCKED on engine install** — same as Phases 1–6. Nothing
+below has been compiled or run; screenshots cannot exist without a running editor.
+
+**Settings schema** (the gate's other deliverable):
+
+| Class | Field | Range/Default |
+|---|---|---|
+| `UMidanGameUserSettings` | `HUDScale` | player-facing range from `UMidanHUDDataAsset`, default 1.0 |
+| | `bMinimalHUD` | default false |
+| | `bPhotoMode` | default false |
+| | `MasterVolume` / `EngineVolume` / `TyreVolume` / `WindVolume` | 0.0–1.0, default 1.0 |
+| `UMidanHUDDataAsset` | `RPMAmberThreshold` / `RPMRedThreshold` | 0.80 / 0.92 (ART_DIRECTION §8.1) |
+| | `PanelOpacity` / `PanelCornerRadiusPx` | 0.72 / 6px (§8.3) |
+| | `SafeMarginPercent` | 0.05 (§8.4) |
+| | `HUDScaleMin` / `HUDScaleMax` | 0.75 / 1.5 (§8.4) |
+| | `MinimapSampleCount` | 128 |
+| `UMidanSaveGame` | `VehicleRecords[].BestLapTimeSeconds`, `.BestSectorTimeSeconds[4]` | keyed by vehicle asset name |
+
+**Deviations from plan, recorded so they are not rediscovered:**
+
+- Two classes live in `MidanHUD.h/.cpp` — `AMidanHUD` and `UMidanHUDWidget` (the persistent
+  RPM/speed/gear/position/sector/assist-flags/minimap panel). The plan names no separate
+  file for the panel, and it has nowhere else to live without inventing one.
+- `FMidanVehicleFrameState` (`MidanCore`) gained `bTractionControlActive`, `bABSActive`, and
+  `EngineRPMNormalised` — the HUD needs live assist state and a normalised RPM value through
+  `IMidanVehicleInterface`, and both are `MidanVehicle`-side facts (`UVehicleAssistComponent`,
+  `UVehicleSetupDataAsset::Powertrain.MaxRPM`) the interface could not otherwise expose
+  without `MidanRace` depending on `MidanVehicle`.
+- `UMidanLapTimingSubsystem::FOnMidanSectorCompleted` gained a third parameter,
+  `DeltaVsPreviousBestSeconds`, computed before the subsystem's own best-sector record
+  updates — needed for the HUD's live sector delta, and unrecoverable after the fact once a
+  new best overwrites the previous one.
+- `docs/ARCHITECTURE.md` §2.3's tick inventory gained a row for UMG `NativeTick` on every
+  state-driven widget — the same "render-rate concern by definition" exemption already
+  granted to `UMidanChaseCameraComponent`.
+
+See docs/ASSUMPTIONS.md A42–A45 for the reasoning behind each.
 
 ---
 

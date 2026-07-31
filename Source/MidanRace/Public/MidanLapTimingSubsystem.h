@@ -98,7 +98,15 @@ struct MIDANRACE_API FMidanRacerLapProgress
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnMidanLapCompleted, AActor* /*Racer*/, const FMidanLapRecord& /*Lap*/);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnMidanLapInvalidated, AActor* /*Racer*/);
-DECLARE_MULTICAST_DELEGATE_TwoParams(FOnMidanSectorCompleted, AActor* /*Racer*/, const FMidanSectorTime& /*Sector*/);
+/** DeltaVsPreviousBestSeconds: this sector's time minus whatever the racer's
+ *  best for this sector index was BEFORE this crossing — 0 on a racer's
+ *  first time through a sector, when there is no previous best to compare
+ *  against. Computed here rather than left for a listener to derive, because
+ *  by the time the broadcast fires the subsystem's own best-sector record
+ *  may already have been updated to THIS time (if it's a new best), which
+ *  would make "vs previous best" unrecoverable downstream. Phase 7's HUD
+ *  sector-delta display (ART_DIRECTION §8.1) is the reason this exists. */
+DECLARE_MULTICAST_DELEGATE_ThreeParams(FOnMidanSectorCompleted, AActor* /*Racer*/, const FMidanSectorTime& /*Sector*/, float /*DeltaVsPreviousBestSeconds*/);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnMidanRacerFinished, AActor* /*Racer*/, int32 /*TotalLaps*/);
 
 UCLASS()

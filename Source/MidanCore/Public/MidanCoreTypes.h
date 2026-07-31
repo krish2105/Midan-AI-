@@ -209,6 +209,19 @@ struct MIDANCORE_API FMidanVehicleFrameState
 	UPROPERTY()
 	float EngineRPM = 0.f;
 
+	/**
+	 * EngineRPM normalised 0..1 against the vehicle's own MaxRPM.
+	 *
+	 * Added at Phase 7: the HUD's RPM strip (ART_DIRECTION §8.1) needs a
+	 * normalised value to drive its colour thresholds, and MaxRPM lives in
+	 * UVehicleSetupDataAsset — a MidanVehicle asset MidanRace's HUD code
+	 * cannot reach. AMidanVehiclePawn already has the setup asset loaded to
+	 * compute this, so it is cheaper to normalise once here than to expose
+	 * a second interface method just to hand the raw MaxRPM across.
+	 */
+	UPROPERTY()
+	float EngineRPMNormalised = 0.f;
+
 	/** 0 is neutral, negative is reverse. */
 	UPROPERTY()
 	int32 Gear = 0;
@@ -233,6 +246,23 @@ struct MIDANCORE_API FMidanVehicleFrameState
 
 	UPROPERTY()
 	FMidanWheelState Wheels[MidanVehicleConstants::NumWheels];
+
+	/**
+	 * Live traction-control / ABS intervention state.
+	 *
+	 * Added at Phase 7 so the HUD's TC/ABS flags (ART_DIRECTION §8.5) can be
+	 * read through IMidanVehicleInterface without MidanRace depending on
+	 * MidanVehicle for UVehicleAssistComponent's EMidanAssistFlags — exactly
+	 * the "a system needs a field it cannot derive" case this struct exists
+	 * for. Momentary, not sticky: true only while the assist is actively
+	 * intervening this frame, per §8.5's rule that these are live state, not
+	 * a latch.
+	 */
+	UPROPERTY()
+	bool bTractionControlActive = false;
+
+	UPROPERTY()
+	bool bABSActive = false;
 
 	/** Count of wheels currently off the racing surface. Race-side off-track
 	 *  logic thresholds on this rather than on any single wheel. */

@@ -54,13 +54,15 @@ void AMidanRacePlayerState::HandleLapInvalidated(AActor* Racer)
 	bCurrentLapValid = false;
 }
 
-void AMidanRacePlayerState::HandleSectorCompleted(AActor* Racer, const FMidanSectorTime& Sector)
+void AMidanRacePlayerState::HandleSectorCompleted(AActor* Racer, const FMidanSectorTime& Sector, float DeltaVsPreviousBestSeconds)
 {
 	if (Racer != BoundRacer.Get())
 	{
 		return;
 	}
 	CurrentSectorIndex = Sector.SectorIndex + 1;
+	LastSectorDeltaSeconds = DeltaVsPreviousBestSeconds;
+	bHasSectorDelta = true;
 }
 
 void AMidanRacePlayerState::HandleRacerFinished(AActor* Racer, int32 TotalLaps)

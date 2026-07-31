@@ -47,6 +47,17 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Midan|Race")
 	bool bFinishedRace = false;
 
+	/** This sector's time minus the racer's previous best for that sector
+	 *  index — negative is faster (a new best), positive is slower. Updates
+	 *  once per sector completion, not continuously; see
+	 *  UMidanLapTimingSubsystem::FOnMidanSectorCompleted's comment. 0 and
+	 *  bHasSectorDelta false before the first sector completes. */
+	UPROPERTY(BlueprintReadOnly, Category = "Midan|Race")
+	float LastSectorDeltaSeconds = 0.f;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Midan|Race")
+	bool bHasSectorDelta = false;
+
 	/** Called by AMidanRaceGameState's 10Hz timer. Not exposed as
 	 *  BlueprintCallable — position is computed, never set by hand. */
 	void SetPosition(int32 InPosition) { Position = InPosition; }
@@ -70,7 +81,7 @@ public:
 private:
 	void HandleLapCompleted(AActor* Racer, const FMidanLapRecord& Lap);
 	void HandleLapInvalidated(AActor* Racer);
-	void HandleSectorCompleted(AActor* Racer, const FMidanSectorTime& Sector);
+	void HandleSectorCompleted(AActor* Racer, const FMidanSectorTime& Sector, float DeltaVsPreviousBestSeconds);
 	void HandleRacerFinished(AActor* Racer, int32 TotalLaps);
 
 	TWeakObjectPtr<AActor> BoundRacer;

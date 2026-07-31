@@ -616,3 +616,67 @@ README would state the gap explicitly rather than omit the row silently.
 Flagged now because "hitch count dropped from X to Y" is one of the three things the
 master prompt identifies as what actually gets you hired (Part 2), and it is the one most
 exposed by the Mac-first decision.
+
+---
+
+## Phase 7 assumptions
+
+### A42 — `AMidanHUD.h` holds two classes, not one · Phase 7
+
+`docs/PHASE_PLAN.md`'s Phase 7 file table names only `MidanHUD.h/.cpp` for the persistent
+race panel (RPM, speed, gear, position, sector delta, assist/off-track flags, minimap) AND
+the `AHUD` actor that owns every widget.
+
+**Assumed:** both `AMidanHUD` (thin: create, own, show/hide, bind pause input) and
+`UMidanHUDWidget` (the panel's live-data binding) live in the same file pair. The
+alternative — inventing a `MidanHUDWidget.h/.cpp` the plan never named — seemed like a
+larger deviation than two `UCLASS` in one header, which UHT supports without difficulty.
+
+### A43 — Three `FMidanVehicleFrameState` fields added for the HUD · Phase 7
+
+The HUD needs live TC/ABS intervention state and a normalised RPM value. Both are facts
+only `MidanVehicle` classes hold — `UVehicleAssistComponent::GetActiveInterventions()` and
+`UVehicleSetupDataAsset::Powertrain.MaxRPM` — and `MidanRace` does not depend on
+`MidanVehicle` (docs/ASSUMPTIONS.md A7).
+
+**Assumed:** `bTractionControlActive`, `bABSActive`, and `EngineRPMNormalised` added to
+`FMidanVehicleFrameState` in `MidanCore`, populated by `AMidanVehiclePawn::GetVehicleFrameState`
+(which already has both the assist component and the loaded setup asset), read by the HUD
+through `IMidanVehicleInterface` like every other frame-state field. Same precedent as
+`FMidanTrackPosition` and every other MidanCore POD: "changes when a system needs a field
+it cannot derive."
+
+**Cost:** `FMidanVehicleFrameState` grows by five bytes (two bools, one float) per instance,
+written every frame in the game-thread `GetVehicleFrameState` call (not the async physics
+callback, so the allocation-free rule does not apply — these are plain scalar writes).
+Negligible against the struct's existing size.
+
+### A44 — Sector-completion delta is a discrete broadcast payload, not a continuous read · Phase 7
+
+ART_DIRECTION §8.1 calls for a "Live delta vs personal best sector." A continuously live
+mid-sector delta would need the racer's historical pace at every point WITHIN a sector, not
+just at its end — data this vertical slice does not collect (see docs/ASSUMPTIONS.md A9's
+sibling reasoning: build what the spec needs, not a speculative superset).
+
+**Assumed:** "live" is delivered as "updates the instant each sector completes," which is
+what a racing HUD's sector delta conventionally shows anyway (compare any commercial
+racing game's sector-time readout: it appears at the split, not continuously). Implemented
+by computing the delta inside `UMidanLapTimingSubsystem::HandleCheckpointCrossed`, before
+the subsystem's own best-sector record updates (a new best would otherwise overwrite the
+value being compared against), and passing it as a third `FOnMidanSectorCompleted`
+parameter rather than leaving `AMidanRacePlayerState` to recompute it from data that may no
+longer be available by the time the broadcast is handled.
+
+### A45 — UMG widget `Tick` is added to the pre-committed tick inventory · Phase 7
+
+`docs/ARCHITECTURE.md` §2.3 requires every ticking system to be pre-committed and
+justified; additions need justification. A HUD showing live speed, RPM, and position is
+inherently a per-frame concern — there is no meaningful "timer instead" for rendering
+current state to the screen every frame.
+
+**Assumed:** `UMidanHUDWidget` and the state-driven widgets tick via UMG's standard
+`NativeTick`, added to the §2.3 table under the same justification already granted to
+`UMidanChaseCameraComponent` ("a render-rate concern by definition"). This is the
+established, idiomatic mechanism for live UI in Unreal; building a custom timer-driven
+alternative would not reduce cost — the work still happens every rendered frame regardless
+of which mechanism triggers it — and would only add a bespoke pattern for no benefit.

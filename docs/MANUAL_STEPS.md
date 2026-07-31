@@ -654,3 +654,73 @@ speed profile" requirement.
   and the overshoot/offset magnitudes in §6.1 assume a corner takes at least that long to
   drive through; a very short corner on the eventual track layout may need per-corner
   tuning beyond the flat per-tier values this phase ships.
+
+---
+
+## Phase 7 — Race flow & UI
+
+Every C++ base class exists with its `BindWidget` contract declared. **The actual visual
+layout is entirely manual** — CLAUDE.md's Blueprint rule applies here at its strongest: a
+`WBP_` Blueprint may only carry the widget tree and cosmetic styling, never logic, and every
+one of these C++ classes was written so that is possible.
+
+### 7.1 Author the WBP_ Blueprint subclasses
+
+One Widget Blueprint per C++ class, each named `WBP_<ClassName>` and set as that class's
+child, in `Content/Midan/UI/`:
+
+| Blueprint | Parent | Required named widgets (must match `BindWidget` exactly) |
+|---|---|---|
+| `WBP_MidanHUD` | `UMidanHUDWidget` | `SpeedText`, `GearText`, `RPMBar`, `PositionText`, `LapText`, `SectorDeltaText`, `TCFlagText`, `ABSFlagText`, `OffTrackFlagText`, `Minimap` (a `UMidanMinimapWidget` instance) |
+| `WBP_MidanCountdown` | `UMidanCountdownWidget` | `CountdownText` |
+| `WBP_MidanResults` | `UMidanResultsWidget` | `ResultsList` (Vertical Box) |
+| `WBP_MidanPause` | `UMidanPauseWidget` | `ResumeButton`, `SettingsButton`, `QuitButton`, `Settings` (a `UMidanSettingsWidget` instance) |
+| `WBP_MidanSettings` | `UMidanSettingsWidget` | `HUDScaleSlider`, `MinimalHUDCheckBox`, `PhotoModeCheckBox`, `MasterVolumeSlider`, `EngineVolumeSlider`, `TyreVolumeSlider`, `WindVolumeSlider` |
+| `WBP_MidanMinimap` | `UMidanMinimapWidget` | none — draws entirely in `NativePaint` |
+
+Layout per `docs/ART_DIRECTION.md` §8.1: RPM strip directly adjacent to `GearText` (§8.2
+correction 1), minimap bottom-right, position/lap and sector delta top-right, assist/
+off-track flags top-left. Panels: ~72% opacity, 6px corner radius, **no backdrop blur
+material anywhere** (§8.3). All numeric text fields use a monospace font.
+
+### 7.2 Author `DA_HUD` (`UMidanHUDDataAsset`)
+
+One instance at `Content/Midan/UI/DA_HUD`, defaults are the ART_DIRECTION §8.1/§8.5 values
+already set in code. Point `WBP_MidanHUD` and `WBP_MidanSettings`'s `HUDData` property at it.
+
+### 7.3 Wire `AMidanHUD`
+
+On the GameMode Blueprint's `HUDClass` (base `AGameModeBase` property): set to a Blueprint
+subclass of `AMidanHUD`. On that subclass, set `MainHUDWidgetClass` = `WBP_MidanHUD`,
+`CountdownWidgetClass` = `WBP_MidanCountdown`, `ResultsWidgetClass` = `WBP_MidanResults`,
+`PauseWidgetClass` = `WBP_MidanPause`, and `PauseAction` = `IA_Pause` (authored §1.3).
+
+### 7.4 Screenshot descriptions — the Phase 7 gate deliverable
+
+Cannot be literal screenshots without a running editor (§0.1). Described instead:
+
+- **Racing HUD, mid-corner:** RPM strip amber (car near the shift point), gear "4" beside
+  it, speed "187" bottom-left in monospace. Top-right shows "P2" above a green "↓0.412"
+  sector delta. Top-left is empty — no assist intervention, on-track. Bottom-right minimap
+  shows the full circuit outline as a thin light-grey line with a gold dot (player) and six
+  grey dots (opponents) clustered near the top of the loop.
+- **Racing HUD, off-track with ABS firing:** Same layout, but top-left now shows amber
+  "ABS" and red "OFF TRACK" stacked, both in the three-letter label style §8.5 specifies —
+  no icons.
+- **Countdown:** HUD elements fade per §8.3; a large centred "3" (then "2", "1", "GO")
+  dominates the frame, monospace, high contrast against the darkened grid scene.
+- **Results:** A vertical list, "P1  PlayerName  best 78.412", one row per racer sorted by
+  finishing position, centred over a dimmed race scene.
+- **Pause menu:** Three buttons (Resume / Settings / Quit) over a translucent full-screen
+  panel; Settings expands in place to the slider/checkbox layout from §7.1.
+
+### 7.5 Known gaps at this gate
+
+- **Nothing is compiled or rendered.** Every UMG binding is asserted only by the `BindWidget`
+  contract UHT enforces at Blueprint-compile time in the editor — untested here.
+- **The minimap's dot-to-arc-length mapping is a nearest-sample approximation**
+  (`MidanMinimapWidget.cpp`), not a true interpolation between cached polyline points. Visible
+  jitter at `MinimapSampleCount` = 128 should be sub-pixel at typical minimap sizes; increase
+  the sample count if it is not.
+- **No accessibility pass beyond the specified colourblind rule.** Font sizing, contrast
+  ratios, and controller navigation through the settings/pause menus are unverified.

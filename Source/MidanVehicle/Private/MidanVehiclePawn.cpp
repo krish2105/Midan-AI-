@@ -455,6 +455,11 @@ void AMidanVehiclePawn::GetVehicleFrameState(FMidanVehicleFrameState& OutState) 
 		OutState.EngineRPM = MidanMovement->GetEngineRotationSpeed();
 		OutState.Gear = MidanMovement->GetCurrentGear();
 
+		if (LoadedSetup && LoadedSetup->Powertrain.MaxRPM > KINDA_SMALL_NUMBER)
+		{
+			OutState.EngineRPMNormalised = FMath::Clamp(OutState.EngineRPM / LoadedSetup->Powertrain.MaxRPM, 0.f, 1.f);
+		}
+
 		MidanMovement->WriteWheelPhysicsToFrameState(OutState);
 	}
 
@@ -463,6 +468,13 @@ void AMidanVehiclePawn::GetVehicleFrameState(FMidanVehicleFrameState& OutState) 
 	if (SurfaceSensor)
 	{
 		SurfaceSensor->WriteToFrameState(OutState);
+	}
+
+	if (Assists)
+	{
+		const EMidanAssistFlags Active = Assists->GetActiveInterventions();
+		OutState.bTractionControlActive = EnumHasAnyFlags(Active, EMidanAssistFlags::TractionControl);
+		OutState.bABSActive = EnumHasAnyFlags(Active, EMidanAssistFlags::ABS);
 	}
 }
 

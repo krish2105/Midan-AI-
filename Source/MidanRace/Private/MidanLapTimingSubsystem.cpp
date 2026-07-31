@@ -207,6 +207,12 @@ void UMidanLapTimingSubsystem::HandleCheckpointCrossed(AMidanCheckpoint* Checkpo
 
 		Progress->SectorsThisLap.Add(SectorTime);
 
+		const bool bHasPreviousBest = MidanRaceConstants::MaxSectorCount > SectorTime.SectorIndex
+			&& Progress->BestSectorTimeSeconds[SectorTime.SectorIndex] < TNumericLimits<float>::Max();
+		const float DeltaVsPreviousBestSeconds = bHasPreviousBest
+			? (SectorTime.TimeSeconds - Progress->BestSectorTimeSeconds[SectorTime.SectorIndex])
+			: 0.f;
+
 		if (SectorTime.bValid && MidanRaceConstants::MaxSectorCount > SectorTime.SectorIndex
 			&& SectorTime.TimeSeconds < Progress->BestSectorTimeSeconds[SectorTime.SectorIndex])
 		{
@@ -216,7 +222,7 @@ void UMidanLapTimingSubsystem::HandleCheckpointCrossed(AMidanCheckpoint* Checkpo
 		Progress->CurrentSectorIndex = Checkpoint->SectorIndex;
 		Progress->SectorStartRaceTimeSeconds = Now;
 
-		OnSectorCompleted.Broadcast(Racer, SectorTime);
+		OnSectorCompleted.Broadcast(Racer, SectorTime, DeltaVsPreviousBestSeconds);
 	}
 
 	Progress->NextExpectedCheckpointIndex = Result.NewNextExpectedIndex;

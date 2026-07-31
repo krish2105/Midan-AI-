@@ -99,6 +99,7 @@ anything not on it is event- or timer-driven, and additions need justification.
 | `UMidanLapTimingSubsystem` | checkpoint overlap events + off-track grace timer | Event-driven |
 | `AMidanOpponentController` | per-frame, **staggered across the 7 opponents** | Control loop; the stagger keeps game-thread cost flat |
 | `UMidanTelemetrySubsystem` | fixed **60 Hz** accumulator | Decoupled from frame rate by spec |
+| `UMidanHUDWidget` and every state-driven UI widget (`UMidanCountdownWidget`, `UMidanResultsWidget`) | UMG `NativeTick`, per-frame | Reading live render-rate state (speed, RPM, position) is what a HUD is; UMG widget Tick is the standard mechanism for it, the same exemption already granted to `UMidanChaseCameraComponent`. Added at Phase 7. |
 
 ---
 
